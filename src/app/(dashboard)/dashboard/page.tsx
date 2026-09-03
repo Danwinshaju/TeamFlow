@@ -188,11 +188,17 @@ export default async function DashboardPage({
             <h2 className="text-xl font-semibold">Your workspaces</h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {userWorkspaces.map((workspace) => (
-                <article key={workspace.id} className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <Link
+                  key={workspace.id}
+                  href={`/workspaces/${workspace.slug}`}
+                  className="group rounded-2xl border border-white/10 bg-white/5 p-6 transition hover:border-violet-400/40 hover:bg-white/[0.07]"
+                >
                   <p className="text-lg font-semibold">{workspace.name}</p>
                   <p className="mt-1 text-sm capitalize text-violet-300">{workspace.role}</p>
-                  <p className="mt-3 text-xs text-slate-500">{workspace.slug}</p>
-                </article>
+                  <p className="mt-4 text-sm font-medium text-slate-400 transition group-hover:text-white">
+                    Open workspace →
+                  </p>
+                </Link>
               ))}
             </div>
           </section>
