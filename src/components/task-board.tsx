@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 type TaskStatus = "todo" | "in_progress" | "done";
@@ -319,7 +320,7 @@ export function TaskBoard({
                   {columnTasks.map((task) => (
                     <article key={task.id} className="rounded-xl border border-white/10 bg-slate-900 p-4">
                       <div className="flex items-start justify-between gap-3">
-                        <p className="font-medium">{task.title}</p>
+                        <Link href={`/workspaces/${workspaceSlug}/projects/${projectId}/tasks/${task.id}`} className="font-medium transition hover:text-violet-300">{task.title}</Link>
                         <span className={`text-xs font-semibold capitalize ${priorityColor(task.priority)}`}>{task.priority}</span>
                       </div>
                       {task.description && <p className="mt-2 text-sm text-slate-400">{task.description}</p>}

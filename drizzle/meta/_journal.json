@@ -50,6 +50,13 @@
       "when": 1788434587423,
       "tag": "0006_certain_mathemanic",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788435562126,
+      "tag": "0007_typical_whistler",
+      "breakpoints": true
     }
   ]
 }

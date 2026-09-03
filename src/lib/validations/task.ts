@@ -45,4 +45,12 @@ export const updateTaskSchema = z
     message: "Provide at least one task change.",
   });
 
+export const createTaskCommentSchema = z.object({
+  body: z
+    .string()
+    .trim()
+    .min(1, "Comment cannot be empty")
+    .max(2000, "Comment cannot exceed 2000 characters"),
+});
+
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;

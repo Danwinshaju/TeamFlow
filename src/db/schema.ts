@@ -349,6 +349,52 @@ export const tasks = pgTable(
   ],
 );
 
+export const taskComments = pgTable(
+  "task_comments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("task_comments_task_created_idx").on(table.taskId, table.createdAt),
+    index("task_comments_user_id_idx").on(table.userId),
+  ],
+);
+
+export const taskActivities = pgTable(
+  "task_activities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    actorUserId: uuid("actor_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    action: varchar("action", { length: 50 }).notNull(),
+    details: text("details"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("task_activities_task_created_idx").on(table.taskId, table.createdAt),
+    index("task_activities_actor_id_idx").on(table.actorUserId),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
@@ -373,3 +419,8 @@ export type NewProject = typeof projects.$inferInsert;
 
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
+
+export type TaskComment = typeof taskComments.$inferSelect;
+export type NewTaskComment = typeof taskComments.$inferInsert;
+export type TaskActivity = typeof taskActivities.$inferSelect;
+export type NewTaskActivity = typeof taskActivities.$inferInsert;

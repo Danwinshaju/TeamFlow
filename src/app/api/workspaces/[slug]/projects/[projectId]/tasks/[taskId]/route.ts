@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import { projects, tasks, users, workspaceMembers, workspaces } from "@/db/schema";
+import { projects, taskActivities, tasks, users, workspaceMembers, workspaces } from "@/db/schema";
 import { getCurrentUser } from "@/lib/security/session";
 import { updateTaskSchema } from "@/lib/validations/task";
 
@@ -107,6 +107,14 @@ export async function PATCH(request: Request, context: TaskRouteContext) {
   if (!updatedTask) {
     return Response.json({ error: "Task not found." }, { status: 404 });
   }
+
+  const changedFields = Object.keys(changes).join(", ");
+  await db.insert(taskActivities).values({
+    taskId: updatedTask.id,
+    actorUserId: currentUser.id,
+    action: "updated",
+    details: `updated ${changedFields}`,
+  });
 
   const [task] = await db
     .select({

@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   projects,
+  taskActivities,
   tasks,
   users,
   workspaceMembers,
@@ -110,6 +111,13 @@ export async function POST(request: Request, context: TasksRouteContext) {
       createdByUserId: currentUser.id,
     })
     .returning();
+
+  await db.insert(taskActivities).values({
+    taskId: task.id,
+    actorUserId: currentUser.id,
+    action: "created",
+    details: "created this task",
+  });
 
   return Response.json(
     {
