@@ -2,6 +2,7 @@ import {
   index,
   pgEnum,
   pgTable,
+  text,
   timestamp,
   uniqueIndex,
   uuid,
@@ -23,6 +24,11 @@ export const workspaceRole = pgEnum("workspace_role", [
   "owner",
   "admin",
   "member",
+]);
+
+export const projectStatus = pgEnum("project_status", [
+  "active",
+  "archived",
 ]);
 
 export const users = pgTable(
@@ -261,6 +267,37 @@ export const workspaceInvitations = pgTable(
   ],
 );
 
+export const projects = pgTable(
+  "projects",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 100 }).notNull(),
+    key: varchar("key", { length: 20 }).notNull(),
+    description: text("description"),
+    status: projectStatus("status").default("active").notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("projects_workspace_key_unique").on(
+      table.workspaceId,
+      table.key,
+    ),
+    index("projects_workspace_id_idx").on(table.workspaceId),
+    index("projects_status_idx").on(table.status),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
@@ -279,3 +316,6 @@ export type WorkspaceInvitation =
   typeof workspaceInvitations.$inferSelect;
 export type NewWorkspaceInvitation =
   typeof workspaceInvitations.$inferInsert;
+
+export type Project = typeof projects.$inferSelect;
+export type NewProject = typeof projects.$inferInsert;

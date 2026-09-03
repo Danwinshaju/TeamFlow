@@ -36,6 +36,13 @@
       "when": 1788431325960,
       "tag": "0004_careful_goliath",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788434187833,
+      "tag": "0005_loose_puma",
+      "breakpoints": true
     }
   ]
 }

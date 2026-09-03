@@ -3,9 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 
 import { PendingInvitations } from "@/components/pending-invitations";
+import { ProjectForm } from "@/components/project-form";
 import { WorkspaceInvitationForm } from "@/components/workspace-invitation-form";
 import { db } from "@/db";
 import {
+  projects,
   users,
   workspaceMembers,
   workspaces,
@@ -70,6 +72,17 @@ export default async function WorkspacePage({
       eq(workspaceMembers.workspaceId, membership.workspaceId),
     );
 
+  const workspaceProjects = await db
+    .select({
+      id: projects.id,
+      name: projects.name,
+      key: projects.key,
+      description: projects.description,
+      status: projects.status,
+    })
+    .from(projects)
+    .where(eq(projects.workspaceId, membership.workspaceId));
+
   const canManageWorkspace =
     membership.role === "owner" || membership.role === "admin";
 
@@ -123,8 +136,12 @@ export default async function WorkspacePage({
           />
           <SummaryCard
             label="Projects"
-            value="0"
-            description="No projects created yet"
+            value={String(workspaceProjects.length)}
+            description={
+              workspaceProjects.length === 0
+                ? "No projects created yet"
+                : "Projects in this workspace"
+            }
           />
           <SummaryCard
             label="Open tasks"
@@ -191,13 +208,30 @@ export default async function WorkspacePage({
               <p className="mt-2 text-sm text-slate-400">
                 Organize your team&apos;s work into projects.
               </p>
-              <button
-                type="button"
-                disabled
-                className="mt-5 w-full rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Create project — coming next
-              </button>
+
+              {workspaceProjects.length > 0 && (
+                <div className="mt-5 space-y-3">
+                  {workspaceProjects.map((project) => (
+                    <Link
+                      key={project.id}
+                      href={`/workspaces/${membership.workspaceSlug}/projects/${project.id}`}
+                      className="block rounded-xl border border-white/10 bg-slate-950/50 p-4 transition hover:border-violet-400/40"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-semibold">{project.name}</p>
+                        <span className="text-xs font-medium text-violet-300">{project.key}</span>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-sm text-slate-400">
+                        {project.description || "No description"}
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              {canManageWorkspace && (
+                <ProjectForm workspaceSlug={membership.workspaceSlug} />
+              )}
             </section>
 
             {canManageWorkspace && (
