@@ -1,4 +1,4 @@
-    import {
+import {
   and,
   eq,
   gt,
@@ -25,6 +25,108 @@ type InvitationRouteContext = {
   }>;
 };
 
+export async function GET(
+  _request: Request,
+  context: InvitationRouteContext,
+) {
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    return Response.json(
+      {
+        error: "Authentication required.",
+      },
+      {
+        status: 401,
+      },
+    );
+  }
+
+  const { slug } = await context.params;
+
+  const [membership] = await db
+    .select({
+      workspaceId: workspaces.id,
+      role: workspaceMembers.role,
+    })
+    .from(workspaceMembers)
+    .innerJoin(
+      workspaces,
+      eq(
+        workspaceMembers.workspaceId,
+        workspaces.id,
+      ),
+    )
+    .where(
+      and(
+        eq(workspaces.slug, slug),
+        eq(
+          workspaceMembers.userId,
+          currentUser.id,
+        ),
+      ),
+    )
+    .limit(1);
+
+  if (!membership) {
+    return Response.json(
+      {
+        error: "Workspace not found.",
+      },
+      {
+        status: 404,
+      },
+    );
+  }
+
+  if (
+    membership.role !== "owner" &&
+    membership.role !== "admin"
+  ) {
+    return Response.json(
+      {
+        error:
+          "You do not have permission to view invitations.",
+      },
+      {
+        status: 403,
+      },
+    );
+  }
+
+  const invitations = await db
+    .select({
+      id: workspaceInvitations.id,
+      email: workspaceInvitations.email,
+      role: workspaceInvitations.role,
+      expiresAt: workspaceInvitations.expiresAt,
+      createdAt: workspaceInvitations.createdAt,
+    })
+    .from(workspaceInvitations)
+    .where(
+      and(
+        eq(
+          workspaceInvitations.workspaceId,
+          membership.workspaceId,
+        ),
+        isNull(
+          workspaceInvitations.acceptedAt,
+        ),
+        isNull(
+          workspaceInvitations.revokedAt,
+        ),
+        gt(
+          workspaceInvitations.expiresAt,
+          new Date(),
+        ),
+      ),
+    );
+
+  return Response.json({
+    invitations,
+  });
+}
+
 export async function POST(
   request: Request,
   context: InvitationRouteContext,
@@ -33,8 +135,12 @@ export async function POST(
 
   if (!currentUser) {
     return Response.json(
-      { error: "Authentication required." },
-      { status: 401 },
+      {
+        error: "Authentication required.",
+      },
+      {
+        status: 401,
+      },
     );
   }
 
@@ -44,7 +150,9 @@ export async function POST(
         error:
           "Verify your email before inviting members.",
       },
-      { status: 403 },
+      {
+        status: 403,
+      },
     );
   }
 
@@ -59,20 +167,30 @@ export async function POST(
     .from(workspaceMembers)
     .innerJoin(
       workspaces,
-      eq(workspaceMembers.workspaceId, workspaces.id),
+      eq(
+        workspaceMembers.workspaceId,
+        workspaces.id,
+      ),
     )
     .where(
       and(
         eq(workspaces.slug, slug),
-        eq(workspaceMembers.userId, currentUser.id),
+        eq(
+          workspaceMembers.userId,
+          currentUser.id,
+        ),
       ),
     )
     .limit(1);
 
   if (!membership) {
     return Response.json(
-      { error: "Workspace not found." },
-      { status: 404 },
+      {
+        error: "Workspace not found.",
+      },
+      {
+        status: 404,
+      },
     );
   }
 
@@ -85,7 +203,9 @@ export async function POST(
         error:
           "You do not have permission to invite members.",
       },
-      { status: 403 },
+      {
+        status: 403,
+      },
     );
   }
 
@@ -95,20 +215,28 @@ export async function POST(
     body = await request.json();
   } catch {
     return Response.json(
-      { error: "Invalid request." },
-      { status: 400 },
+      {
+        error: "Invalid request.",
+      },
+      {
+        status: 400,
+      },
     );
   }
 
-  const result = createInvitationSchema.safeParse(body);
+  const result =
+    createInvitationSchema.safeParse(body);
 
   if (!result.success) {
     return Response.json(
       {
         error: "Enter valid invitation details.",
-        fields: result.error.flatten().fieldErrors,
+        fields:
+          result.error.flatten().fieldErrors,
       },
-      { status: 400 },
+      {
+        status: 400,
+      },
     );
   }
 
@@ -121,7 +249,10 @@ export async function POST(
     .from(workspaceMembers)
     .innerJoin(
       users,
-      eq(workspaceMembers.userId, users.id),
+      eq(
+        workspaceMembers.userId,
+        users.id,
+      ),
     )
     .where(
       and(
@@ -140,7 +271,9 @@ export async function POST(
         error:
           "This person is already a workspace member.",
       },
-      { status: 409 },
+      {
+        status: 409,
+      },
     );
   }
 
@@ -155,9 +288,16 @@ export async function POST(
           workspaceInvitations.workspaceId,
           membership.workspaceId,
         ),
-        eq(workspaceInvitations.email, email),
-        isNull(workspaceInvitations.acceptedAt),
-        isNull(workspaceInvitations.revokedAt),
+        eq(
+          workspaceInvitations.email,
+          email,
+        ),
+        isNull(
+          workspaceInvitations.acceptedAt,
+        ),
+        isNull(
+          workspaceInvitations.revokedAt,
+        ),
         gt(
           workspaceInvitations.expiresAt,
           new Date(),
@@ -172,7 +312,9 @@ export async function POST(
         error:
           "A valid invitation has already been sent to this email.",
       },
-      { status: 409 },
+      {
+        status: 409,
+      },
     );
   }
 
@@ -189,7 +331,8 @@ export async function POST(
       email,
       role,
       tokenHash,
-      invitedByUserId: currentUser.id,
+      invitedByUserId:
+        currentUser.id,
       expiresAt,
     })
     .returning({
@@ -200,7 +343,8 @@ export async function POST(
     await sendWorkspaceInvitationEmail({
       email,
       token,
-      workspaceName: membership.workspaceName,
+      workspaceName:
+        membership.workspaceName,
       inviterName: currentUser.name,
     });
   } catch (error) {
@@ -223,14 +367,19 @@ export async function POST(
         error:
           "The invitation email could not be sent.",
       },
-      { status: 502 },
+      {
+        status: 502,
+      },
     );
   }
 
   return Response.json(
     {
-      message: "Invitation sent successfully.",
+      message:
+        "Invitation sent successfully.",
     },
-    { status: 201 },
+    {
+      status: 201,
+    },
   );
 }

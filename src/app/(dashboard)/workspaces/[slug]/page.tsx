@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 
+import { PendingInvitations } from "@/components/pending-invitations";
 import { WorkspaceInvitationForm } from "@/components/workspace-invitation-form";
 import { db } from "@/db";
 import {
@@ -174,6 +175,10 @@ export default async function WorkspacePage({
                 </p>
 
                 <WorkspaceInvitationForm
+                  workspaceSlug={membership.workspaceSlug}
+                />
+
+                <PendingInvitations
                   workspaceSlug={membership.workspaceSlug}
                 />
               </div>
