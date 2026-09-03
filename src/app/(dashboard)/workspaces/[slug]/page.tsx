@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 
+import { WorkspaceInvitationForm } from "@/components/workspace-invitation-form";
 import { db } from "@/db";
 import {
   users,
@@ -111,15 +112,6 @@ export default async function WorkspacePage({
             </p>
           </div>
 
-          {canManageWorkspace && (
-            <button
-              type="button"
-              disabled
-              className="rounded-xl bg-violet-500 px-5 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Invite member — coming next
-            </button>
-          )}
         </section>
 
         <section className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -169,6 +161,23 @@ export default async function WorkspacePage({
                 </div>
               ))}
             </div>
+
+            {canManageWorkspace && (
+              <div className="mt-6 border-t border-white/10 pt-6">
+                <h3 className="font-semibold">
+                  Invite a team member
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-400">
+                  Send someone a secure invitation to this
+                  workspace.
+                </p>
+
+                <WorkspaceInvitationForm
+                  workspaceSlug={membership.workspaceSlug}
+                />
+              </div>
+            )}
           </section>
 
           <div className="space-y-6">

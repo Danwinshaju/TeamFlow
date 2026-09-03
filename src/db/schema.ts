@@ -200,6 +200,67 @@ export const workspaceMembers = pgTable(
   ],
 );
 
+export const workspaceInvitations = pgTable(
+  "workspace_invitations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, {
+        onDelete: "cascade",
+      }),
+
+    email: varchar("email", {
+      length: 320,
+    }).notNull(),
+
+    role: workspaceRole("role")
+      .default("member")
+      .notNull(),
+
+    tokenHash: varchar("token_hash", {
+      length: 64,
+    }).notNull(),
+
+    invitedByUserId: uuid("invited_by_user_id")
+      .notNull()
+      .references(() => users.id, {
+        onDelete: "cascade",
+      }),
+
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+    }).notNull(),
+
+    acceptedAt: timestamp("accepted_at", {
+      withTimezone: true,
+    }),
+
+    revokedAt: timestamp("revoked_at", {
+      withTimezone: true,
+    }),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("workspace_invitations_token_hash_unique").on(
+      table.tokenHash,
+    ),
+    index("workspace_invitations_workspace_email_idx").on(
+      table.workspaceId,
+      table.email,
+    ),
+    index("workspace_invitations_expires_at_idx").on(
+      table.expiresAt,
+    ),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
@@ -213,3 +274,8 @@ export type Workspace = typeof workspaces.$inferSelect;
 export type NewWorkspace = typeof workspaces.$inferInsert;
 export type WorkspaceMember = typeof workspaceMembers.$inferSelect;
 export type NewWorkspaceMember = typeof workspaceMembers.$inferInsert;
+
+export type WorkspaceInvitation =
+  typeof workspaceInvitations.$inferSelect;
+export type NewWorkspaceInvitation =
+  typeof workspaceInvitations.$inferInsert;
