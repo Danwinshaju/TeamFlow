@@ -7,12 +7,27 @@ export const metadata = {
   title: "Dashboard",
 };
 
-export default async function DashboardPage() {
+type DashboardPageProps = {
+  searchParams: Promise<{
+    verification?: string | string[];
+  }>;
+};
+
+export default async function DashboardPage({
+  searchParams,
+}: DashboardPageProps) {
   const user = await getCurrentUser();
 
   if (!user) {
     redirect("/login");
   }
+
+  const parameters = await searchParams;
+
+  const verification =
+    typeof parameters.verification === "string"
+      ? parameters.verification
+      : null;
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -24,23 +39,44 @@ export default async function DashboardPage() {
 
           <div className="flex items-center gap-5">
             <div className="text-right">
-                <p className="text-sm font-medium">{user.name}</p>
-                <p className="text-xs text-slate-400">{user.email}</p>
-                </div>
+              <p className="text-sm font-medium">{user.name}</p>
+              <p className="text-xs text-slate-400">
+                {user.email}
+              </p>
+            </div>
 
-  <form action="/api/auth/logout" method="post">
-    <button
-      type="submit"
-      className="rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"
-    >
-      Sign out
-    </button>
-  </form>
-</div>
+            <form action="/api/auth/logout" method="post">
+              <button
+                type="submit"
+                className="rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-7xl px-6 py-10">
+        {verification === "sent" && (
+          <div
+            role="status"
+            className="mb-6 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-5 py-4 text-emerald-200"
+          >
+            Verification email sent. Check your inbox.
+          </div>
+        )}
+
+        {verification === "failed" && (
+          <div
+            role="alert"
+            className="mb-6 rounded-2xl border border-red-400/30 bg-red-400/10 px-5 py-4 text-red-200"
+          >
+            We could not send the verification email. Please try
+            again.
+          </div>
+        )}
+
         {user.status === "pending_verification" && (
           <div className="mb-8 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-5 py-4">
             <p className="font-semibold text-amber-200">
@@ -48,9 +84,22 @@ export default async function DashboardPage() {
             </p>
 
             <p className="mt-1 text-sm text-amber-100/70">
-              Your workspace is available, but sensitive actions will
-              remain restricted until your email is verified.
+              Your workspace is available, but sensitive actions
+              will remain restricted until your email is verified.
             </p>
+
+            <form
+              action="/api/auth/resend-verification"
+              method="post"
+              className="mt-4"
+            >
+              <button
+                type="submit"
+                className="rounded-lg bg-amber-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-200"
+              >
+                Send verification email
+              </button>
+            </form>
           </div>
         )}
 

@@ -14,6 +14,11 @@ export const userStatus = pgEnum("user_status", [
   "suspended",
 ]);
 
+export const authTokenType = pgEnum("auth_token_type", [
+  "email_verification",
+  "password_reset",
+]);
+
 export const users = pgTable(
   "users",
   {
@@ -64,7 +69,7 @@ export const sessions = pgTable(
 
     userId: uuid("user_id")
       .notNull()
-      .references(() => users.id, {
+     .references(() => users.id, {
         onDelete: "cascade",
       }),
 
@@ -97,8 +102,56 @@ export const sessions = pgTable(
   ],
 );
 
+export const authTokens = pgTable(
+  "auth_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, {
+        onDelete: "cascade",
+      }),
+
+    type: authTokenType("type").notNull(),
+
+    tokenHash: varchar("token_hash", {
+      length: 64,
+    }).notNull(),
+
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+    }).notNull(),
+
+    usedAt: timestamp("used_at", {
+      withTimezone: true,
+    }),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("auth_tokens_token_hash_unique").on(
+      table.tokenHash,
+    ),
+    index("auth_tokens_user_type_idx").on(
+      table.userId,
+      table.type,
+    ),
+    index("auth_tokens_expires_at_idx").on(
+      table.expiresAt,
+    ),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
+
+export type AuthToken = typeof authTokens.$inferSelect;
+export type NewAuthToken = typeof authTokens.$inferInsert;
