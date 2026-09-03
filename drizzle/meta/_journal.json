@@ -43,6 +43,13 @@
       "when": 1788434187833,
       "tag": "0005_loose_puma",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788434587423,
+      "tag": "0006_certain_mathemanic",
+      "breakpoints": true
     }
   ]
 }

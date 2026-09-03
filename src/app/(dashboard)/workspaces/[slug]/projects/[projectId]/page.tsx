@@ -2,8 +2,15 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 
+import { TaskBoard } from "@/components/task-board";
 import { db } from "@/db";
-import { projects, workspaceMembers, workspaces } from "@/db/schema";
+import {
+  projects,
+  tasks,
+  users,
+  workspaceMembers,
+  workspaces,
+} from "@/db/schema";
 import { getCurrentUser } from "@/lib/security/session";
 
 export const metadata = { title: "Project" };
@@ -28,6 +35,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       description: projects.description,
       status: projects.status,
       createdAt: projects.createdAt,
+      workspaceId: workspaces.id,
       workspaceName: workspaces.name,
       workspaceSlug: workspaces.slug,
       memberRole: workspaceMembers.role,
@@ -47,6 +55,36 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   if (!project) {
     notFound();
   }
+
+  const members = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+    })
+    .from(workspaceMembers)
+    .innerJoin(users, eq(workspaceMembers.userId, users.id))
+    .where(eq(workspaceMembers.workspaceId, project.workspaceId));
+
+  const projectTasks = await db
+    .select({
+      id: tasks.id,
+      title: tasks.title,
+      description: tasks.description,
+      status: tasks.status,
+      priority: tasks.priority,
+      assigneeId: tasks.assigneeId,
+      assigneeName: users.name,
+      dueAt: tasks.dueAt,
+    })
+    .from(tasks)
+    .leftJoin(users, eq(tasks.assigneeId, users.id))
+    .where(eq(tasks.projectId, project.id));
+
+  const completedTasks = projectTasks.filter(
+    (task) => task.status === "done",
+  ).length;
+  const openTasks = projectTasks.length - completedTasks;
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -68,16 +106,20 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         </div>
 
         <section className="mt-10 grid gap-5 sm:grid-cols-3">
-          <ProjectCard label="Open tasks" value="0" description="No tasks created" />
-          <ProjectCard label="Completed" value="0" description="Nothing completed yet" />
-          <ProjectCard label="Team" value="1" description="Workspace members" />
+          <ProjectCard label="Open tasks" value={String(openTasks)} description="Tasks still in progress" />
+          <ProjectCard label="Completed" value={String(completedTasks)} description="Finished tasks" />
+          <ProjectCard label="Team" value={String(members.length)} description="Workspace members" />
         </section>
 
-        <section className="mt-10 rounded-2xl border border-white/10 bg-white/5 p-8">
-          <h2 className="text-xl font-semibold">Project board</h2>
-          <p className="mt-2 text-slate-400">Tasks, assignments, priorities, and workflow columns will appear here.</p>
-          <button type="button" disabled className="mt-6 rounded-xl bg-violet-500 px-5 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-60">Task management coming next</button>
-        </section>
+        <TaskBoard
+          workspaceSlug={project.workspaceSlug}
+          projectId={project.id}
+          members={members}
+          initialTasks={projectTasks.map((task) => ({
+            ...task,
+            dueAt: task.dueAt?.toISOString() ?? null,
+          }))}
+        />
       </div>
     </main>
   );

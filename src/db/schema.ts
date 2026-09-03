@@ -1,5 +1,6 @@
 import {
   index,
+  integer,
   pgEnum,
   pgTable,
   text,
@@ -29,6 +30,19 @@ export const workspaceRole = pgEnum("workspace_role", [
 export const projectStatus = pgEnum("project_status", [
   "active",
   "archived",
+]);
+
+export const taskStatus = pgEnum("task_status", [
+  "todo",
+  "in_progress",
+  "done",
+]);
+
+export const taskPriority = pgEnum("task_priority", [
+  "low",
+  "medium",
+  "high",
+  "urgent",
 ]);
 
 export const users = pgTable(
@@ -298,6 +312,43 @@ export const projects = pgTable(
   ],
 );
 
+export const tasks = pgTable(
+  "tasks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 160 }).notNull(),
+    description: text("description"),
+    status: taskStatus("status").default("todo").notNull(),
+    priority: taskPriority("priority").default("medium").notNull(),
+    assigneeId: uuid("assignee_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    position: integer("position").default(0).notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("tasks_project_status_idx").on(table.projectId, table.status),
+    index("tasks_workspace_id_idx").on(table.workspaceId),
+    index("tasks_assignee_id_idx").on(table.assigneeId),
+    index("tasks_due_at_idx").on(table.dueAt),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
@@ -319,3 +370,6 @@ export type NewWorkspaceInvitation =
 
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
+
+export type Task = typeof tasks.$inferSelect;
+export type NewTask = typeof tasks.$inferInsert;
