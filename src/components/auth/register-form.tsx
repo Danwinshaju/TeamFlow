@@ -1,14 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+
 import {
   registerSchema,
   type RegisterInput,
 } from "@/lib/validations/auth";
 
 export function RegisterForm() {
+  const router = useRouter();
+  const [serverError, setServerError] = useState<string | null>(null);
+
   const {
     register,
     handleSubmit,
@@ -25,7 +31,34 @@ export function RegisterForm() {
   });
 
   async function onSubmit(data: RegisterInput) {
-    console.log("Validated registration:", data);
+    setServerError(null);
+
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+
+      const result = (await response.json()) as {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        setServerError(
+          result.error ?? "Unable to create your account.",
+        );
+        return;
+      }
+
+      router.push("/login?registered=true");
+    } catch {
+      setServerError(
+        "Unable to connect to the server. Please try again.",
+      );
+    }
   }
 
   const inputClassName =
@@ -60,11 +93,15 @@ export function RegisterForm() {
             autoComplete="name"
             placeholder="Your name"
             aria-invalid={Boolean(errors.name)}
+            aria-describedby={errors.name ? "name-error" : undefined}
             className={inputClassName}
             {...register("name")}
           />
 
-          <ErrorMessage message={errors.name?.message} />
+          <ErrorMessage
+            id="name-error"
+            message={errors.name?.message}
+          />
         </div>
 
         <div>
@@ -81,11 +118,15 @@ export function RegisterForm() {
             autoComplete="email"
             placeholder="you@company.com"
             aria-invalid={Boolean(errors.email)}
+            aria-describedby={errors.email ? "email-error" : undefined}
             className={inputClassName}
             {...register("email")}
           />
 
-          <ErrorMessage message={errors.email?.message} />
+          <ErrorMessage
+            id="email-error"
+            message={errors.email?.message}
+          />
         </div>
 
         <div>
@@ -102,11 +143,17 @@ export function RegisterForm() {
             autoComplete="new-password"
             placeholder="Create a strong password"
             aria-invalid={Boolean(errors.password)}
+            aria-describedby={
+              errors.password ? "password-error" : undefined
+            }
             className={inputClassName}
             {...register("password")}
           />
 
-          <ErrorMessage message={errors.password?.message} />
+          <ErrorMessage
+            id="password-error"
+            message={errors.password?.message}
+          />
         </div>
 
         <div>
@@ -123,35 +170,65 @@ export function RegisterForm() {
             autoComplete="new-password"
             placeholder="Enter your password again"
             aria-invalid={Boolean(errors.confirmPassword)}
+            aria-describedby={
+              errors.confirmPassword
+                ? "confirm-password-error"
+                : undefined
+            }
             className={inputClassName}
             {...register("confirmPassword")}
           />
 
-          <ErrorMessage message={errors.confirmPassword?.message} />
+          <ErrorMessage
+            id="confirm-password-error"
+            message={errors.confirmPassword?.message}
+          />
         </div>
 
         <div>
           <label className="flex items-start gap-3 text-sm text-slate-300">
             <input
               type="checkbox"
+              aria-invalid={Boolean(errors.acceptTerms)}
+              aria-describedby={
+                errors.acceptTerms ? "terms-error" : undefined
+              }
               className="mt-1 h-4 w-4 accent-violet-500"
               {...register("acceptTerms")}
             />
 
             <span>
               I agree to the{" "}
-              <Link href="/terms" className="text-violet-400 hover:underline">
+              <Link
+                href="/terms"
+                className="text-violet-400 hover:underline"
+              >
                 Terms
               </Link>{" "}
               and{" "}
-              <Link href="/privacy" className="text-violet-400 hover:underline">
+              <Link
+                href="/privacy"
+                className="text-violet-400 hover:underline"
+              >
                 Privacy Policy
               </Link>
             </span>
           </label>
 
-          <ErrorMessage message={errors.acceptTerms?.message} />
+          <ErrorMessage
+            id="terms-error"
+            message={errors.acceptTerms?.message}
+          />
         </div>
+
+        {serverError && (
+          <div
+            role="alert"
+            className="rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300"
+          >
+            {serverError}
+          </div>
+        )}
 
         <button
           type="submit"
@@ -176,13 +253,18 @@ export function RegisterForm() {
 }
 
 type ErrorMessageProps = {
+  id: string;
   message?: string;
 };
 
-function ErrorMessage({ message }: ErrorMessageProps) {
+function ErrorMessage({ id, message }: ErrorMessageProps) {
   if (!message) {
     return null;
   }
 
-  return <p className="mt-2 text-sm text-red-400">{message}</p>;
+  return (
+    <p id={id} className="mt-2 text-sm text-red-400">
+      {message}
+    </p>
+  );
 }
