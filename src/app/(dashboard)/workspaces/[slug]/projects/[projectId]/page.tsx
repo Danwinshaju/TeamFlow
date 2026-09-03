@@ -76,6 +76,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       assigneeId: tasks.assigneeId,
       assigneeName: users.name,
       dueAt: tasks.dueAt,
+      createdByUserId: tasks.createdByUserId,
     })
     .from(tasks)
     .leftJoin(users, eq(tasks.assigneeId, users.id))
@@ -115,6 +116,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           workspaceSlug={project.workspaceSlug}
           projectId={project.id}
           members={members}
+          currentUserId={user.id}
+          currentUserRole={project.memberRole}
           initialTasks={projectTasks.map((task) => ({
             ...task,
             dueAt: task.dueAt?.toISOString() ?? null,
