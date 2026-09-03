@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { count, eq } from "drizzle-orm";
 
+import { WorkspaceForm } from "@/components/workspace-form";
+import { db } from "@/db";
+import { workspaceMembers, workspaces } from "@/db/schema";
 import { getCurrentUser } from "@/lib/security/session";
 
 export const metadata = {
@@ -28,6 +32,34 @@ export default async function DashboardPage({
     typeof parameters.verification === "string"
       ? parameters.verification
       : null;
+
+  const userWorkspaces = await db
+    .select({
+      id: workspaces.id,
+      name: workspaces.name,
+      slug: workspaces.slug,
+      role: workspaceMembers.role,
+    })
+    .from(workspaceMembers)
+    .innerJoin(
+      workspaces,
+      eq(workspaceMembers.workspaceId, workspaces.id),
+    )
+    .where(eq(workspaceMembers.userId, user.id));
+
+  const primaryWorkspace = userWorkspaces[0];
+  let memberCount = 0;
+
+  if (primaryWorkspace) {
+    const [result] = await db
+      .select({ value: count() })
+      .from(workspaceMembers)
+      .where(
+        eq(workspaceMembers.workspaceId, primaryWorkspace.id),
+      );
+
+    memberCount = result.value;
+  }
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -119,9 +151,13 @@ export default async function DashboardPage({
 
         <section className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <DashboardCard
-            label="Active projects"
-            value="0"
-            description="No projects created"
+            label="Workspaces"
+            value={String(userWorkspaces.length)}
+            description={
+              userWorkspaces.length === 0
+                ? "Create your first workspace"
+                : "Your active workspaces"
+            }
           />
 
           <DashboardCard
@@ -132,8 +168,12 @@ export default async function DashboardPage({
 
           <DashboardCard
             label="Team members"
-            value="1"
-            description="Your workspace"
+            value={String(memberCount)}
+            description={
+              primaryWorkspace
+                ? primaryWorkspace.name
+                : "No workspace selected"
+            }
           />
 
           <DashboardCard
@@ -143,9 +183,26 @@ export default async function DashboardPage({
           />
         </section>
 
+        {userWorkspaces.length > 0 && (
+          <section className="mt-10">
+            <h2 className="text-xl font-semibold">Your workspaces</h2>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {userWorkspaces.map((workspace) => (
+                <article key={workspace.id} className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <p className="text-lg font-semibold">{workspace.name}</p>
+                  <p className="mt-1 text-sm capitalize text-violet-300">{workspace.role}</p>
+                  <p className="mt-3 text-xs text-slate-500">{workspace.slug}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="mt-10 rounded-2xl border border-white/10 bg-white/5 p-8">
           <h2 className="text-xl font-semibold">
-            Create your first workspace
+            {userWorkspaces.length === 0
+              ? "Create your first workspace"
+              : "Create another workspace"}
           </h2>
 
           <p className="mt-2 max-w-2xl text-slate-400">
@@ -153,13 +210,13 @@ export default async function DashboardPage({
             permissions, tasks, and subscription.
           </p>
 
-          <button
-            type="button"
-            disabled
-            className="mt-6 rounded-xl bg-violet-500 px-5 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Workspace setup coming next
-          </button>
+          {user.status === "active" ? (
+            <WorkspaceForm />
+          ) : (
+            <p className="mt-6 text-sm text-amber-200">
+              Verify your email to create a workspace.
+            </p>
+          )}
         </section>
       </div>
     </main>

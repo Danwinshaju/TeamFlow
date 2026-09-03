@@ -19,6 +19,12 @@ export const authTokenType = pgEnum("auth_token_type", [
   "password_reset",
 ]);
 
+export const workspaceRole = pgEnum("workspace_role", [
+  "owner",
+  "admin",
+  "member",
+]);
+
 export const users = pgTable(
   "users",
   {
@@ -147,6 +153,53 @@ export const authTokens = pgTable(
   ],
 );
 
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 80 }).notNull(),
+    slug: varchar("slug", { length: 100 }).notNull(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("workspaces_slug_unique").on(table.slug),
+    index("workspaces_owner_id_idx").on(table.ownerId),
+  ],
+);
+
+export const workspaceMembers = pgTable(
+  "workspace_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: workspaceRole("role").default("member").notNull(),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("workspace_members_workspace_user_unique").on(
+      table.workspaceId,
+      table.userId,
+    ),
+    index("workspace_members_user_id_idx").on(table.userId),
+    index("workspace_members_workspace_id_idx").on(table.workspaceId),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
@@ -155,3 +208,8 @@ export type NewSession = typeof sessions.$inferInsert;
 
 export type AuthToken = typeof authTokens.$inferSelect;
 export type NewAuthToken = typeof authTokens.$inferInsert;
+
+export type Workspace = typeof workspaces.$inferSelect;
+export type NewWorkspace = typeof workspaces.$inferInsert;
+export type WorkspaceMember = typeof workspaceMembers.$inferSelect;
+export type NewWorkspaceMember = typeof workspaceMembers.$inferInsert;
