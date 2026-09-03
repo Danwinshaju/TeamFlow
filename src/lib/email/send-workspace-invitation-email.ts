@@ -85,8 +85,12 @@ export async function sendWorkspaceInvitationEmail({
   );
 
   if (!response.ok) {
+    const errorBody = await response.json().catch(() => null) as {
+      message?: string;
+    } | null;
     throw new Error(
-      `Resend rejected the invitation with status ${response.status}.`,
+      errorBody?.message ||
+        `Resend rejected the invitation with status ${response.status}.`,
     );
   }
 }

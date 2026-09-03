@@ -30,7 +30,7 @@ export default async function BillingPage({ params }: BillingPageProps) {
     .limit(1);
 
   const status = subscription?.status ?? null;
-  const isPaid = status && !["cancelled", "completed", "expired"].includes(status);
+  const isPaid = status === "authenticated" || status === "active";
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -52,8 +52,28 @@ export default async function BillingPage({ params }: BillingPageProps) {
             <span className="rounded-full border border-white/15 px-3 py-1 text-xs font-medium capitalize text-slate-300">{isPaid ? status : "free"}</span>
           </div>
           <BillingControls workspaceSlug={slug} canManage={workspace.role === "owner"} subscriptionStatus={status} cancelAtCycleEnd={subscription?.cancelAtCycleEnd === 1} />
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            {(isPaid
+              ? [
+                  ["Unlimited projects", "Create as many projects as your team needs."],
+                  ["Up to 50 members", "Invite a larger team into this workspace."],
+                  ["Advanced collaboration", "Use task comments, activity history, and team workflows."],
+                  ["Priority support", "Get help faster when your team is blocked."],
+                ]
+              : [
+                  ["Up to 3 projects", "Enough room to organize your current priorities."],
+                  ["Up to 5 members", "Invite a small team and start collaborating."],
+                  ["Task collaboration", "Create tasks, assign work, and track progress."],
+                  ["Upgrade anytime", "Unlock higher limits as your team grows."],
+                ]).map(([title, description]) => (
+                <div key={title} className="rounded-xl border border-white/10 bg-slate-950/40 p-4">
+                  <p className="font-medium text-slate-200">{title}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
+                </div>
+              ))}
+          </div>
           <div className="mt-6 border-t border-white/10 pt-6">
-            <p className="text-sm text-slate-400">Standard Web Checkout test payment</p>
+            <p className="text-sm text-slate-400">Standard Web Checkout test payment (one-time test only)</p>
             <div className="mt-3">
               <StandardCheckoutButton amount={Number(process.env.NEXT_PUBLIC_RAZORPAY_AMOUNT_PAISE ?? 50000)} />
             </div>

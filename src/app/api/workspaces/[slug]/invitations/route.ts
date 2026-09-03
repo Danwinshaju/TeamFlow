@@ -10,6 +10,7 @@ import {
   users,
   workspaceInvitations,
   workspaceMembers,
+  workspaceSubscriptions,
   workspaces,
 } from "@/db/schema";
 import { sendWorkspaceInvitationEmail } from "@/lib/email/send-workspace-invitation-email";
@@ -209,6 +210,19 @@ export async function POST(
     );
   }
 
+  const [subscription] = await db
+    .select({ status: workspaceSubscriptions.status })
+    .from(workspaceSubscriptions)
+    .where(eq(workspaceSubscriptions.workspaceId, membership.workspaceId))
+    .limit(1);
+  const isPro = subscription?.status === "authenticated" || subscription?.status === "active";
+  if (!isPro) {
+    const memberCount = await db.select({ id: workspaceMembers.id }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, membership.workspaceId));
+    if (memberCount.length >= 5) {
+      return Response.json({ error: "Free workspaces can have up to 5 members. Upgrade to Pro for up to 50 members." }, { status: 403 });
+    }
+  }
+
   let body: unknown;
 
   try {
@@ -362,10 +376,17 @@ export async function POST(
       error,
     );
 
+    const message = error instanceof Error ? error.message : "Unknown email delivery error.";
+    const isResendTestRestriction =
+      message.toLowerCase().includes("testing") ||
+      message.toLowerCase().includes("resend.dev");
+
     return Response.json(
       {
         error:
-          "The invitation email could not be sent.",
+          isResendTestRestriction
+            ? `${message} Use the Resend account email for testing, or verify a domain in Resend.`
+            : "The invitation email could not be sent.",
       },
       {
         status: 502,

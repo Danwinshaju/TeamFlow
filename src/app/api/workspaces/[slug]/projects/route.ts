@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import { projects, workspaceMembers, workspaces } from "@/db/schema";
+import { projects, workspaceMembers, workspaceSubscriptions, workspaces } from "@/db/schema";
 import { getCurrentUser } from "@/lib/security/session";
 import { createProjectSchema } from "@/lib/validations/project";
 
@@ -54,6 +54,19 @@ export async function POST(
       { error: "You do not have permission to create projects." },
       { status: 403 },
     );
+  }
+
+  const [subscription] = await db
+    .select({ status: workspaceSubscriptions.status })
+    .from(workspaceSubscriptions)
+    .where(eq(workspaceSubscriptions.workspaceId, membership.workspaceId))
+    .limit(1);
+  const isPro = subscription?.status === "authenticated" || subscription?.status === "active";
+  if (!isPro) {
+    const existingProjects = await db.select({ id: projects.id }).from(projects).where(eq(projects.workspaceId, membership.workspaceId));
+    if (existingProjects.length >= 3) {
+      return Response.json({ error: "Free workspaces can create up to 3 projects. Upgrade to Pro for unlimited projects." }, { status: 403 });
+    }
   }
 
   let body: unknown;

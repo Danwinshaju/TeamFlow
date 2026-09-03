@@ -61,6 +61,8 @@ export function TaskBoard({
   const [editDueDate, setEditDueDate] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState<"all" | TaskPriority>("all");
 
   const apiBase = `/api/workspaces/${workspaceSlug}/projects/${projectId}/tasks`;
 
@@ -126,6 +128,28 @@ export function TaskBoard({
           task.id === taskId ? { ...task, status } : task,
         ),
       );
+    } catch {
+      setError("Unable to connect to the server.");
+    } finally {
+      setMovingId(null);
+    }
+  }
+
+  async function assignTask(taskId: string, nextAssigneeId: string) {
+    setError(null);
+    setMovingId(taskId);
+    try {
+      const response = await fetch(`${apiBase}/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigneeId: nextAssigneeId }),
+      });
+      const result = (await response.json()) as { task?: BoardTask; error?: string };
+      if (!response.ok || !result.task) {
+        setError(result.error ?? "Unable to assign the task.");
+        return;
+      }
+      setTasks((current) => current.map((task) => task.id === taskId ? result.task! : task));
     } catch {
       setError("Unable to connect to the server.");
     } finally {
@@ -306,9 +330,17 @@ export function TaskBoard({
           </span>
         </div>
 
+        <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_180px]">
+          <input aria-label="Search tasks" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search tasks..." className="rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2.5 text-sm outline-none focus:border-violet-400" />
+          <select aria-label="Filter by priority" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as "all" | TaskPriority)} className="rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2.5 text-sm outline-none focus:border-violet-400">
+            <option value="all">All priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
+          </select>
+        </div>
+
         <div className="mt-5 grid gap-5 lg:grid-cols-3">
           {columns.map((column) => {
-            const columnTasks = tasks.filter((task) => task.status === column.status);
+            const query = search.trim().toLowerCase();
+            const columnTasks = tasks.filter((task) => task.status === column.status && (!query || `${task.title} ${task.description ?? ""} ${task.assigneeName ?? ""}`.toLowerCase().includes(query)) && (priorityFilter === "all" || task.priority === priorityFilter));
             return (
               <div key={column.status} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                 <div className="flex items-center justify-between">
@@ -328,6 +360,10 @@ export function TaskBoard({
                         <p>{task.assigneeName ?? "Unassigned"}</p>
                         {task.dueAt && <p>Due {formatDate(task.dueAt)}</p>}
                       </div>
+                      <select aria-label={`Assign ${task.title}`} value={task.assigneeId ?? ""} disabled={movingId === task.id} onChange={(event) => void assignTask(task.id, event.target.value)} className="mt-3 w-full rounded-lg border border-white/10 bg-slate-950 px-2 py-2 text-xs outline-none">
+                        <option value="">Unassigned</option>
+                        {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
+                      </select>
                       <select
                         aria-label={`Move ${task.title}`}
                         value={task.status}

@@ -87,6 +87,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     (task) => task.status === "done",
   ).length;
   const openTasks = projectTasks.length - completedTasks;
+  const today = new Date();
+  const overdueTasks = projectTasks.filter((task) => task.dueAt && task.status !== "done" && task.dueAt < today).length;
+  const highPriorityTasks = projectTasks.filter((task) => (task.priority === "high" || task.priority === "urgent") && task.status !== "done").length;
+  const progress = projectTasks.length === 0 ? 0 : Math.round((completedTasks / projectTasks.length) * 100);
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -113,6 +117,15 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           <ProjectCard label="Team" value={String(members.length)} description="Workspace members" />
         </section>
 
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div><h2 className="text-lg font-semibold">Project health</h2><p className="text-sm text-slate-400">A quick view of what needs attention.</p></div>
+            <span className="text-2xl font-bold text-violet-300">{progress}% complete</span>
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${progress}%` }} /></div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3"><Insight label="Completed" value={String(completedTasks)} tone="text-emerald-300" /><Insight label="Overdue" value={String(overdueTasks)} tone={overdueTasks ? "text-red-300" : "text-slate-300"} /><Insight label="High priority open" value={String(highPriorityTasks)} tone={highPriorityTasks ? "text-orange-300" : "text-slate-300"} /></div>
+        </section>
+
         {project.status === "active" ? (
           <TaskBoard workspaceSlug={project.workspaceSlug} projectId={project.id} members={members} currentUserId={user.id} currentUserRole={project.memberRole} initialTasks={projectTasks.map((task) => ({ ...task, dueAt: task.dueAt?.toISOString() ?? null }))} />
         ) : (
@@ -135,4 +148,8 @@ function ProjectCard({ label, value, description }: { label: string; value: stri
       <p className="mt-2 text-sm text-slate-500">{description}</p>
     </article>
   );
+}
+
+function Insight({ label, value, tone }: { label: string; value: string; tone: string }) {
+  return <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4"><p className="text-xs text-slate-500">{label}</p><p className={`mt-2 text-2xl font-bold ${tone}`}>{value}</p></div>;
 }
