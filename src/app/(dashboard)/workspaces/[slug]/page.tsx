@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq, ne } from "drizzle-orm";
 
 import { PendingInvitations } from "@/components/pending-invitations";
 import { ProjectForm } from "@/components/project-form";
 import { WorkspaceInvitationForm } from "@/components/workspace-invitation-form";
+import { WorkspaceSettings } from "@/components/workspace-settings";
 import { db } from "@/db";
 import {
   projects,
+  tasks,
   users,
   workspaceMembers,
   workspaces,
@@ -83,6 +85,11 @@ export default async function WorkspacePage({
     .from(projects)
     .where(eq(projects.workspaceId, membership.workspaceId));
 
+  const [openTaskResult] = await db
+    .select({ value: count() })
+    .from(tasks)
+    .where(and(eq(tasks.workspaceId, membership.workspaceId), ne(tasks.status, "done")));
+
   const canManageWorkspace =
     membership.role === "owner" || membership.role === "admin";
 
@@ -126,6 +133,13 @@ export default async function WorkspacePage({
             </p>
           </div>
 
+          <Link
+            href={`/workspaces/${membership.workspaceSlug}/billing`}
+            className="rounded-lg border border-violet-400/30 bg-violet-400/10 px-4 py-2 text-sm font-medium text-violet-200 transition hover:bg-violet-400/20"
+          >
+            Billing
+          </Link>
+
         </section>
 
         <section className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -145,8 +159,8 @@ export default async function WorkspacePage({
           />
           <SummaryCard
             label="Open tasks"
-            value="0"
-            description="No tasks assigned yet"
+            value={String(openTaskResult.value)}
+            description={openTaskResult.value === 0 ? "No open tasks" : "Tasks still in progress"}
           />
         </section>
 
@@ -234,16 +248,8 @@ export default async function WorkspacePage({
               )}
             </section>
 
-            {canManageWorkspace && (
-              <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                <h2 className="text-xl font-semibold">Workspace settings</h2>
-                <p className="mt-2 text-sm text-slate-400">
-                  Manage the workspace name, members, and permissions.
-                </p>
-                <p className="mt-5 rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3 text-xs text-slate-500">
-                  Settings controls will be added after invitations.
-                </p>
-              </section>
+            {membership.role === "owner" && (
+              <WorkspaceSettings workspaceSlug={membership.workspaceSlug} initialName={membership.workspaceName} members={members.map((member) => ({ id: member.id, name: member.name, email: member.email, role: member.role }))} />
             )}
           </div>
         </div>

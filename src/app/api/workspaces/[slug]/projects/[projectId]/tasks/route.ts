@@ -34,7 +34,7 @@ export async function POST(request: Request, context: TasksRouteContext) {
 
   const { slug, projectId } = await context.params;
   const [access] = await db
-    .select({ workspaceId: workspaces.id })
+    .select({ workspaceId: workspaces.id, projectStatus: projects.status })
     .from(projects)
     .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
     .innerJoin(
@@ -49,6 +49,10 @@ export async function POST(request: Request, context: TasksRouteContext) {
 
   if (!access) {
     return Response.json({ error: "Project not found." }, { status: 404 });
+  }
+
+  if (access.projectStatus === "archived") {
+    return Response.json({ error: "Reactivate this project before creating tasks." }, { status: 409 });
   }
 
   let body: unknown;

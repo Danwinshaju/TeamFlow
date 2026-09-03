@@ -24,7 +24,7 @@ export async function PATCH(request: Request, context: TaskRouteContext) {
 
   const { slug, projectId, taskId } = await context.params;
   const [access] = await db
-    .select({ workspaceId: workspaces.id, role: workspaceMembers.role })
+    .select({ workspaceId: workspaces.id, role: workspaceMembers.role, projectStatus: projects.status })
     .from(projects)
     .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
     .innerJoin(
@@ -39,6 +39,10 @@ export async function PATCH(request: Request, context: TaskRouteContext) {
 
   if (!access) {
     return Response.json({ error: "Project not found." }, { status: 404 });
+  }
+
+  if (access.projectStatus === "archived") {
+    return Response.json({ error: "Reactivate this project before editing tasks." }, { status: 409 });
   }
 
   let body: unknown;
@@ -150,6 +154,7 @@ export async function DELETE(_request: Request, context: TaskRouteContext) {
     .select({
       workspaceId: workspaces.id,
       role: workspaceMembers.role,
+      projectStatus: projects.status,
       createdByUserId: tasks.createdByUserId,
     })
     .from(tasks)
@@ -173,6 +178,10 @@ export async function DELETE(_request: Request, context: TaskRouteContext) {
 
   if (!taskAccess) {
     return Response.json({ error: "Task not found." }, { status: 404 });
+  }
+
+  if (taskAccess.projectStatus === "archived") {
+    return Response.json({ error: "Reactivate this project before deleting tasks." }, { status: 409 });
   }
 
   const mayDelete =

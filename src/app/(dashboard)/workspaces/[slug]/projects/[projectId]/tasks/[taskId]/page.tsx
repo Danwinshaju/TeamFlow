@@ -30,6 +30,7 @@ export default async function TaskPage({ params }: TaskPageProps) {
       createdAt: tasks.createdAt,
       projectName: projects.name,
       projectKey: projects.key,
+      projectStatus: projects.status,
       workspaceId: workspaces.id,
       workspaceName: workspaces.name,
     })
@@ -57,7 +58,8 @@ export default async function TaskPage({ params }: TaskPageProps) {
         <p className="text-sm font-medium text-violet-400">{task.workspaceName} / {task.projectKey}</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">{task.title}</h1>
         <p className="mt-2 text-sm text-slate-500">Created {formatDate(task.createdAt)}</p>
-        <div className="mt-8"><TaskDetailsPanel apiBase={taskApiBase} task={{ ...task, dueAt: task.dueAt?.toISOString() ?? null }} members={members} comments={comments.map((comment) => ({ ...comment, createdAt: comment.createdAt.toISOString() }))} /></div>
+        {task.projectStatus === "archived" && <div className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-200">This project is archived. Task details are read-only.</div>}
+        <div className="mt-8"><TaskDetailsPanel apiBase={taskApiBase} readOnly={task.projectStatus === "archived"} task={{ ...task, dueAt: task.dueAt?.toISOString() ?? null }} members={members} comments={comments.map((comment) => ({ ...comment, createdAt: comment.createdAt.toISOString() }))} /></div>
 
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
           <h2 className="text-xl font-semibold">Activity history</h2>

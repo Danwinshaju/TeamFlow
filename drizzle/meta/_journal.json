@@ -57,6 +57,13 @@
       "when": 1788435562126,
       "tag": "0007_typical_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788449132595,
+      "tag": "0008_aromatic_network",
+      "breakpoints": true
     }
   ]
 }

@@ -27,7 +27,7 @@ export async function POST(request: Request, context: CommentsRouteContext) {
 
   const { slug, projectId, taskId } = await context.params;
   const [access] = await db
-    .select({ taskId: tasks.id })
+    .select({ taskId: tasks.id, projectStatus: projects.status })
     .from(tasks)
     .innerJoin(projects, eq(tasks.projectId, projects.id))
     .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
@@ -49,6 +49,10 @@ export async function POST(request: Request, context: CommentsRouteContext) {
 
   if (!access) {
     return Response.json({ error: "Task not found." }, { status: 404 });
+  }
+
+  if (access.projectStatus === "archived") {
+    return Response.json({ error: "Reactivate this project before adding comments." }, { status: 409 });
   }
 
   let body: unknown;

@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { count, eq } from "drizzle-orm";
+import { and, count, eq, ne } from "drizzle-orm";
 
 import { WorkspaceForm } from "@/components/workspace-form";
 import { db } from "@/db";
-import { workspaceMembers, workspaces } from "@/db/schema";
+import { tasks, workspaceMembers, workspaces } from "@/db/schema";
 import { getCurrentUser } from "@/lib/security/session";
 
 export const metadata = {
@@ -49,6 +49,20 @@ export default async function DashboardPage({
 
   const primaryWorkspace = userWorkspaces[0];
   let memberCount = 0;
+
+  const [openTaskResult] = await db
+    .select({ value: count() })
+    .from(tasks)
+    .innerJoin(
+      workspaceMembers,
+      and(
+        eq(workspaceMembers.workspaceId, tasks.workspaceId),
+        eq(workspaceMembers.userId, user.id),
+      ),
+    )
+    .where(and(eq(tasks.assigneeId, user.id), ne(tasks.status, "done")));
+
+  const openTaskCount = openTaskResult.value;
 
   if (primaryWorkspace) {
     const [result] = await db
@@ -162,8 +176,8 @@ export default async function DashboardPage({
 
           <DashboardCard
             label="Open tasks"
-            value="0"
-            description="Nothing assigned"
+            value={String(openTaskCount)}
+            description={openTaskCount === 0 ? "Nothing assigned" : "Assigned to you"}
           />
 
           <DashboardCard
@@ -182,6 +196,13 @@ export default async function DashboardPage({
             description="Upgrade anytime"
           />
         </section>
+
+        <Link
+          href="/my-tasks"
+          className="mt-5 inline-flex rounded-xl border border-violet-400/30 bg-violet-400/10 px-5 py-3 text-sm font-semibold text-violet-200 transition hover:bg-violet-400/20"
+        >
+          View my tasks →
+        </Link>
 
         {userWorkspaces.length > 0 && (
           <section className="mt-10">

@@ -45,6 +45,17 @@ export const taskPriority = pgEnum("task_priority", [
   "urgent",
 ]);
 
+export const subscriptionStatus = pgEnum("subscription_status", [
+  "created",
+  "authenticated",
+  "active",
+  "pending",
+  "halted",
+  "cancelled",
+  "completed",
+  "expired",
+]);
+
 export const users = pgTable(
   "users",
   {
@@ -192,6 +203,44 @@ export const workspaces = pgTable(
   (table) => [
     uniqueIndex("workspaces_slug_unique").on(table.slug),
     index("workspaces_owner_id_idx").on(table.ownerId),
+  ],
+);
+
+export const workspaceSubscriptions = pgTable(
+  "workspace_subscriptions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    planKey: varchar("plan_key", { length: 40 }).notNull(),
+    razorpayPlanId: varchar("razorpay_plan_id", { length: 100 }).notNull(),
+    razorpaySubscriptionId: varchar("razorpay_subscription_id", {
+      length: 100,
+    }).notNull(),
+    status: subscriptionStatus("status").default("created").notNull(),
+    currentPeriodStart: timestamp("current_period_start", {
+      withTimezone: true,
+    }),
+    currentPeriodEnd: timestamp("current_period_end", {
+      withTimezone: true,
+    }),
+    cancelAtCycleEnd: integer("cancel_at_cycle_end").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("workspace_subscriptions_workspace_unique").on(
+      table.workspaceId,
+    ),
+    uniqueIndex("workspace_subscriptions_razorpay_id_unique").on(
+      table.razorpaySubscriptionId,
+    ),
+    index("workspace_subscriptions_status_idx").on(table.status),
   ],
 );
 

@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 
 import { TaskBoard } from "@/components/task-board";
+import { ProjectSettings } from "@/components/project-settings";
 import { db } from "@/db";
 import {
   projects,
@@ -112,17 +113,15 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           <ProjectCard label="Team" value={String(members.length)} description="Workspace members" />
         </section>
 
-        <TaskBoard
-          workspaceSlug={project.workspaceSlug}
-          projectId={project.id}
-          members={members}
-          currentUserId={user.id}
-          currentUserRole={project.memberRole}
-          initialTasks={projectTasks.map((task) => ({
-            ...task,
-            dueAt: task.dueAt?.toISOString() ?? null,
-          }))}
-        />
+        {project.status === "active" ? (
+          <TaskBoard workspaceSlug={project.workspaceSlug} projectId={project.id} members={members} currentUserId={user.id} currentUserRole={project.memberRole} initialTasks={projectTasks.map((task) => ({ ...task, dueAt: task.dueAt?.toISOString() ?? null }))} />
+        ) : (
+          <div className="mt-10 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-6 text-amber-200">This project is archived. Reactivate it to create or edit tasks.</div>
+        )}
+
+        {(project.memberRole === "owner" || project.memberRole === "admin") && (
+          <ProjectSettings apiUrl={`/api/workspaces/${project.workspaceSlug}/projects/${project.id}/settings`} initialName={project.name} initialDescription={project.description} initialStatus={project.status} />
+        )}
       </div>
     </main>
   );
