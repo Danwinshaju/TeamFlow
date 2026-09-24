@@ -5,6 +5,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { projects, tasks, workspaceMembers, workspaces } from "@/db/schema";
 import { getCurrentUser } from "@/lib/security/session";
+import { getUserAccessDestination, hasAnyPaidWorkspaceAccess } from "@/lib/billing/access";
 import { taskPriorities, taskStatuses } from "@/lib/validations/task";
 
 export const metadata = { title: "My Tasks" };
@@ -19,6 +20,7 @@ type MyTasksPageProps = {
 export default async function MyTasksPage({ searchParams }: MyTasksPageProps) {
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
+  if (!(await hasAnyPaidWorkspaceAccess(currentUser.id))) redirect(await getUserAccessDestination(currentUser.id));
 
   const parameters = await searchParams;
   const requestedStatus = typeof parameters.status === "string" ? parameters.status : "open";

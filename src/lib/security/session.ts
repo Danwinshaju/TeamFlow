@@ -1,91 +1,88 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { and, eq, gt } from "drizzle-orm";
-
 import { db } from "@/db";
 import { sessions, users } from "@/db/schema";
+import { ACCESS_COOKIE, REFRESH_COOKIE, ACCESS_SECONDS, REFRESH_SECONDS,
+  authCookieOptions, signAccessToken, verifyAccessToken } from "./jwt";
 
-const SESSION_COOKIE_NAME = "teamflow_session";
-const SESSION_DURATION_DAYS = 7;
+const hash = (token: string) => createHash("sha256").update(token).digest("hex");
+const newRefresh = () => randomBytes(32).toString("base64url");
 
-function hashSessionToken(token: string) {
-  return createHash("sha256")
-    .update(token)
-    .digest("hex");
+async function setTokens(access: string, refresh: string, expiresAt: Date) {
+  const jar = await cookies();
+  jar.set(ACCESS_COOKIE, access, { ...authCookieOptions, maxAge: ACCESS_SECONDS });
+  jar.set(REFRESH_COOKIE, refresh, { ...authCookieOptions, expires: expiresAt });
+  jar.delete("teamflow_session");
 }
 
-export async function createSession(userId: string) {
-  const token = randomBytes(32).toString("base64url");
-  const tokenHash = hashSessionToken(token);
-
-  const expiresAt = new Date();
-
-  expiresAt.setDate(
-    expiresAt.getDate() + SESSION_DURATION_DAYS,
-  );
-
-  await db.insert(sessions).values({
-    userId,
-    tokenHash,
-    expiresAt,
+// Reuse the sessions table to hold only the current refresh-token hash.
+export async function createSession(userId: string, verifiedPasswordHash: string) {
+  const id = randomUUID();
+  const refresh = newRefresh();
+  const expiresAt = new Date(Date.now() + REFRESH_SECONDS * 1000);
+  const access = await signAccessToken(userId, id);
+  const created = await db.transaction(async (tx) => {
+    // Serialize login against password reset; a stale password cannot mint a new session.
+    const [user] = await tx.select().from(users).where(eq(users.id, userId)).for("update");
+    if (!user || user.status === "suspended" || user.passwordHash !== verifiedPasswordHash) return false;
+    await tx.insert(sessions).values({ id, userId, tokenHash: hash(refresh), expiresAt });
+    return true;
   });
-
-  const cookieStore = await cookies();
-
-  cookieStore.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    expires: expiresAt,
-    priority: "high",
-  });
+  if (!created) return false;
+  await setTokens(access, refresh, expiresAt);
+  return true;
 }
 
 export async function getCurrentUser() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!token) {
-    return null;
-  }
-
-  const tokenHash = hashSessionToken(token);
-
-  const [result] = await db
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      status: users.status,
-    })
-    .from(sessions)
-    .innerJoin(users, eq(sessions.userId, users.id))
-    .where(
-      and(
-        eq(sessions.tokenHash, tokenHash),
-        gt(sessions.expiresAt, new Date()),
-      ),
-    )
+  const token = (await cookies()).get(ACCESS_COOKIE)?.value;
+  if (!token) return null;
+  const identity = await verifyAccessToken(token);
+  if (!identity) return null;
+  const [user] = await db.select({ id: users.id, name: users.name, email: users.email, status: users.status, avatarDataUrl: users.avatarDataUrl, availabilityStatus: users.availabilityStatus })
+    .from(sessions).innerJoin(users, eq(users.id, sessions.userId))
+    .where(and(eq(sessions.id, identity.sessionId), eq(users.id, identity.userId), gt(sessions.expiresAt, new Date())))
     .limit(1);
-
-  if (!result || result.status === "suspended") {
-    return null;
-  }
-
-  return result;
+  return user && user.status !== "suspended" ? user : null;
 }
-export async function deleteCurrentSession() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
-  if (token) {
-    const tokenHash = hashSessionToken(token);
+export async function rotateRefreshToken() {
+  const token = (await cookies()).get(REFRESH_COOKIE)?.value;
+  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return false;
+  const tokenHash = hash(token);
+  const [session] = await db.select().from(sessions).where(and(eq(sessions.tokenHash, tokenHash), gt(sessions.expiresAt, new Date()))).limit(1);
+  if (!session) return false;
+  const refresh = newRefresh();
+  const access = await signAccessToken(session.userId, session.id);
+  const rotated = await db.transaction(async (tx) => {
+    const [user] = await tx.select({ status: users.status }).from(users).where(eq(users.id, session.userId)).for("update");
+    if (!user || user.status === "suspended") return false;
+    // Compare-and-swap: only one request can consume this refresh token.
+    const changed = await tx.update(sessions).set({ tokenHash: hash(refresh), lastSeenAt: new Date() })
+      .where(and(eq(sessions.id, session.id), eq(sessions.tokenHash, tokenHash), gt(sessions.expiresAt, new Date())))
+      .returning({ id: sessions.id });
+    return changed.length === 1;
+  });
+  if (!rotated) return false;
+  await setTokens(access, refresh, session.expiresAt);
+  return true;
+}
 
-    await db
-      .delete(sessions)
-      .where(eq(sessions.tokenHash, tokenHash));
+export async function clearAuthCookies() {
+  const jar = await cookies();
+  for (const name of [ACCESS_COOKIE, REFRESH_COOKIE, "teamflow_session"]) {
+    jar.set(name, "", { ...authCookieOptions, maxAge: 0 });
   }
+}
 
-  cookieStore.delete(SESSION_COOKIE_NAME);
+export async function deleteCurrentSession() {
+  const jar = await cookies();
+  const access = jar.get(ACCESS_COOKIE)?.value;
+  const identity = access ? await verifyAccessToken(access) : null;
+  if (identity) {
+    await db.delete(sessions).where(and(eq(sessions.id, identity.sessionId), eq(sessions.userId, identity.userId)));
+  }
+  const refresh = jar.get(REFRESH_COOKIE)?.value;
+  if (refresh) await db.delete(sessions).where(eq(sessions.tokenHash, hash(refresh)));
+  await clearAuthCookies();
 }

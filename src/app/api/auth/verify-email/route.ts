@@ -1,4 +1,5 @@
 import { verifyEmailToken } from "@/lib/security/auth-token";
+import { sendRegistrationSuccessEmail } from "@/lib/email/send-account-notification-email";
 
 export const runtime = "nodejs";
 
@@ -47,9 +48,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const verified = await verifyEmailToken(body.token);
+  const verifiedUser = await verifyEmailToken(body.token.trim());
 
-  if (!verified) {
+  if (!verifiedUser) {
     return Response.json(
       {
         error:
@@ -59,7 +60,13 @@ export async function POST(request: Request) {
     );
   }
 
+  try {
+    await sendRegistrationSuccessEmail({ email: verifiedUser.email, name: verifiedUser.name });
+  } catch (error) {
+    console.error("Registration confirmation email delivery failed", error);
+  }
+
   return Response.json({
-    message: "Your email address has been verified.",
+    message: "OTP verified. Your registration is complete and you can now sign in.",
   });
 }

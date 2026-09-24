@@ -8,7 +8,6 @@ import {
 import { db } from "@/db";
 import {
   workspaceInvitations,
-  workspaceMembers,
   workspaces,
 } from "@/db/schema";
 import {
@@ -29,7 +28,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (currentUser.status !== "active") {
+  if (currentUser.status !== "active" && !(process.env.NODE_ENV !== "production" && process.env.LOCAL_NETWORK_TESTING === "true")) {
     return Response.json(
       {
         error:
@@ -58,7 +57,14 @@ export async function POST(request: Request) {
       ? body.token
       : null;
 
-  if (!token || !isValidInvitationToken(token)) {
+  const invitationId =
+    typeof body === "object" && body !== null && "invitationId" in body && typeof body.invitationId === "string"
+      ? body.invitationId
+      : null;
+
+  const validToken = token && isValidInvitationToken(token);
+  const validInvitationId = invitationId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(invitationId);
+  if (!validToken && !validInvitationId) {
     return Response.json(
       {
         error:
@@ -68,7 +74,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const tokenHash = hashInvitationToken(token);
+  const tokenHash = validToken ? hashInvitationToken(token) : null;
   const now = new Date();
 
   const result = await db.transaction(
@@ -80,6 +86,7 @@ export async function POST(request: Request) {
             workspaceInvitations.workspaceId,
           email: workspaceInvitations.email,
           role: workspaceInvitations.role,
+          requestedAt: workspaceInvitations.requestedAt,
           workspaceSlug: workspaces.slug,
         })
         .from(workspaceInvitations)
@@ -92,10 +99,9 @@ export async function POST(request: Request) {
         )
         .where(
           and(
-            eq(
-              workspaceInvitations.tokenHash,
-              tokenHash,
-            ),
+            tokenHash
+              ? eq(workspaceInvitations.tokenHash, tokenHash)
+              : eq(workspaceInvitations.id, invitationId as string),
             isNull(
               workspaceInvitations.acceptedAt,
             ),
@@ -118,20 +124,18 @@ export async function POST(request: Request) {
         } as const;
       }
 
-      if (invitation.email !== currentUser.email) {
+      if (invitation.email.toLowerCase() !== currentUser.email.toLowerCase()) {
         return {
           error:
-            "Sign in using the email address that received this invitation.",
+            `This invitation was sent to ${invitation.email}. Sign out and use that exact email address.`,
           status: 403,
         } as const;
       }
 
-      const [claimedInvitation] =
+      const [requestedInvitation] =
         await transaction
           .update(workspaceInvitations)
-          .set({
-            acceptedAt: now,
-          })
+          .set({ requestedAt: now })
           .where(
             and(
               eq(
@@ -150,30 +154,19 @@ export async function POST(request: Request) {
               ),
             ),
           )
-          .returning({
-            id: workspaceInvitations.id,
-          });
+          .returning({ id: workspaceInvitations.id });
 
-      if (!claimedInvitation) {
+      if (!requestedInvitation) {
         return {
           error:
-            "This invitation has already been used.",
+            "This invitation is no longer available.",
           status: 409,
         } as const;
       }
 
-      await transaction
-        .insert(workspaceMembers)
-        .values({
-          workspaceId: invitation.workspaceId,
-          userId: currentUser.id,
-          role: invitation.role,
-        })
-        .onConflictDoNothing();
-
       return {
-        workspaceSlug:
-          invitation.workspaceSlug,
+        workspaceSlug: invitation.workspaceSlug,
+        pendingApproval: true,
       } as const;
     },
   );
@@ -186,7 +179,27 @@ export async function POST(request: Request) {
   }
 
   return Response.json({
-    message: "Invitation accepted.",
+    message: "Join request sent to the workspace Owner.",
     workspaceSlug: result.workspaceSlug,
+    pendingApproval: result.pendingApproval,
   });
+}
+
+export async function GET(request: Request) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return Response.json({ error: "Authentication required." }, { status: 401 });
+  const invitationId = new URL(request.url).searchParams.get("invitationId");
+  if (!invitationId) return Response.json({ error: "Invitation ID is required." }, { status: 400 });
+  const [invitation] = await db.select({
+    acceptedAt: workspaceInvitations.acceptedAt,
+    revokedAt: workspaceInvitations.revokedAt,
+    requestedAt: workspaceInvitations.requestedAt,
+    workspaceSlug: workspaces.slug,
+  }).from(workspaceInvitations).innerJoin(workspaces, eq(workspaceInvitations.workspaceId, workspaces.id)).where(and(
+    eq(workspaceInvitations.id, invitationId),
+    eq(workspaceInvitations.email, currentUser.email),
+  )).limit(1);
+  if (!invitation) return Response.json({ error: "Invitation not found." }, { status: 404 });
+  const status = invitation.acceptedAt ? "approved" : invitation.revokedAt ? "rejected" : invitation.requestedAt ? "waiting" : "invited";
+  return Response.json({ status, workspaceSlug: invitation.workspaceSlug });
 }

@@ -1,7 +1,4 @@
-import { eq } from "drizzle-orm";
-
-import { db } from "@/db";
-import { sessions } from "@/db/schema";
+import { clearAuthCookies } from "@/lib/security/session";
 import { consumePasswordResetToken } from "@/lib/security/auth-token";
 import { hashPassword } from "@/lib/security/password";
 import { resetPasswordSchema } from "@/lib/validations/auth";
@@ -39,7 +36,7 @@ export async function POST(request: Request) {
     );
   }
 
-  await db.delete(sessions).where(eq(sessions.userId, userId));
+  await clearAuthCookies();
 
   return Response.json({
     message: "Password updated. You can now sign in.",

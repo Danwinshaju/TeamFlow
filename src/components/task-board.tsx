@@ -1,4 +1,5 @@
 "use client";
+import { authFetch as fetch } from "@/lib/auth-fetch";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -65,6 +66,7 @@ export function TaskBoard({
   const [priorityFilter, setPriorityFilter] = useState<"all" | TaskPriority>("all");
 
   const apiBase = `/api/workspaces/${workspaceSlug}/projects/${projectId}/tasks`;
+  const canManageTasks = currentUserRole === "owner" || currentUserRole === "admin";
 
   async function createTask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -234,10 +236,21 @@ export function TaskBoard({
   const fieldClassName =
     "w-full rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2.5 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-400/10";
 
+  const completedCount = tasks.filter((task) => task.status === "done").length;
+  const activeCount = tasks.filter((task) => task.status === "in_progress").length;
+  const unassignedCount = tasks.filter((task) => !task.assigneeId && task.status !== "done").length;
+  const progress = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
+
   return (
     <div className="mt-10">
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
-        <h2 className="text-xl font-semibold">Create task</h2>
+      <section className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <BoardInsight label="Total work" value={String(tasks.length)} detail="Tasks in this project" />
+        <BoardInsight label="In progress" value={String(activeCount)} detail="Being worked on now" />
+        <BoardInsight label="Needs an owner" value={String(unassignedCount)} detail="Assign these next" warning={unassignedCount > 0} />
+        <BoardInsight label="Completed" value={`${progress}%`} detail={`${completedCount} tasks finished`} />
+      </section>
+      {canManageTasks && <section id="assign-task" className="scroll-mt-24 rounded-3xl border border-violet-400/20 bg-gradient-to-br from-violet-500/10 to-white/[0.03] p-6">
+        <div><p className="text-xs font-bold tracking-[0.18em] text-violet-300">QUICK ASSIGN</p><h2 className="mt-2 text-xl font-semibold">Give someone a clear next task</h2><p className="mt-1 text-sm text-slate-400">Add the task, choose its owner, priority, and deadline in one step.</p></div>
         <form onSubmit={createTask} className="mt-5 grid gap-4 lg:grid-cols-2">
           <div>
             <label htmlFor="task-title" className="mb-2 block text-sm text-slate-300">Title</label>
@@ -269,10 +282,10 @@ export function TaskBoard({
           </div>
           {error && <div role="alert" className="rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300 lg:col-span-2">{error}</div>}
           <button type="submit" disabled={isCreating} className="rounded-xl bg-violet-500 px-5 py-3 font-semibold transition hover:bg-violet-400 disabled:opacity-60 lg:col-span-2">
-            {isCreating ? "Creating task..." : "Create task"}
+            {isCreating ? "Assigning task..." : assigneeId ? "Create and assign task" : "Create unassigned task"}
           </button>
         </form>
-      </section>
+      </section>}
 
       {editingId && (
         <section className="mt-6 rounded-2xl border border-violet-400/30 bg-violet-400/5 p-6">
@@ -360,11 +373,11 @@ export function TaskBoard({
                         <p>{task.assigneeName ?? "Unassigned"}</p>
                         {task.dueAt && <p>Due {formatDate(task.dueAt)}</p>}
                       </div>
-                      <select aria-label={`Assign ${task.title}`} value={task.assigneeId ?? ""} disabled={movingId === task.id} onChange={(event) => void assignTask(task.id, event.target.value)} className="mt-3 w-full rounded-lg border border-white/10 bg-slate-950 px-2 py-2 text-xs outline-none">
+                      {canManageTasks ? <select aria-label={`Assign ${task.title}`} value={task.assigneeId ?? ""} disabled={movingId === task.id} onChange={(event) => void assignTask(task.id, event.target.value)} className="mt-3 w-full rounded-lg border border-white/10 bg-slate-950 px-2 py-2 text-xs outline-none">
                         <option value="">Unassigned</option>
                         {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
-                      </select>
-                      <select
+                      </select> : null}
+                      {(canManageTasks || task.assigneeId === currentUserId) ? <select
                         aria-label={`Move ${task.title}`}
                         value={task.status}
                         disabled={movingId === task.id}
@@ -372,15 +385,13 @@ export function TaskBoard({
                         className="mt-4 w-full rounded-lg border border-white/10 bg-slate-950 px-2 py-2 text-xs outline-none"
                       >
                         {columns.map((option) => <option key={option.status} value={option.status}>{option.label}</option>)}
-                      </select>
-                      <div className="mt-3 flex gap-2">
+                      </select> : <p className="mt-3 rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-500">Only the assignee can update this task</p>}
+                      {canManageTasks && <div className="mt-3 flex gap-2">
                         <button type="button" onClick={() => beginEditing(task)} className="flex-1 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/10 hover:text-white">Edit</button>
-                        {(currentUserRole === "owner" || currentUserRole === "admin" || task.createdByUserId === currentUserId) && (
-                          <button type="button" disabled={deletingId === task.id} onClick={() => void deleteTask(task)} className="flex-1 rounded-lg border border-red-400/20 px-3 py-2 text-xs font-medium text-red-300 transition hover:bg-red-400/10 disabled:opacity-60">
-                            {deletingId === task.id ? "Deleting..." : "Delete"}
-                          </button>
-                        )}
-                      </div>
+                        <button type="button" disabled={deletingId === task.id} onClick={() => void deleteTask(task)} className="flex-1 rounded-lg border border-red-400/20 px-3 py-2 text-xs font-medium text-red-300 transition hover:bg-red-400/10 disabled:opacity-60">
+                          {deletingId === task.id ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>}
                     </article>
                   ))}
                 </div>
@@ -406,4 +417,8 @@ function formatDate(value: string) {
     month: "short",
     day: "numeric",
   }).format(new Date(value));
+}
+
+function BoardInsight({ label, value, detail, warning = false }: { label: string; value: string; detail: string; warning?: boolean }) {
+  return <article className={`rounded-2xl border p-4 ${warning ? "border-amber-400/20 bg-amber-400/[0.07]" : "border-white/10 bg-white/[0.04]"}`}><p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p><p className={`mt-2 text-2xl font-bold ${warning ? "text-amber-200" : "text-white"}`}>{value}</p><p className="mt-1 text-xs text-slate-500">{detail}</p></article>;
 }

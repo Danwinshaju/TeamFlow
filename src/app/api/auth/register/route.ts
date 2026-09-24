@@ -9,7 +9,7 @@ import { registerSchema } from "@/lib/validations/auth";
 
 export const runtime = "nodejs";
 
-const MAX_BODY_BYTES = 10_000;
+const MAX_BODY_BYTES = 1_600_000;
 
 export async function POST(request: Request) {
   const contentType = request.headers.get("content-type") ?? "";
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { name, email, password } = result.data;
+  const { name, email, password, phone, jobTitle, bio, avatarDataUrl } = result.data;
 
   const existingUsers = await db
     .select({ id: users.id })
@@ -88,6 +88,10 @@ export async function POST(request: Request) {
         name,
         email,
         passwordHash,
+        phone: phone || null,
+        jobTitle: jobTitle || null,
+        bio: bio || null,
+        avatarDataUrl: avatarDataUrl || null,
       })
       .returning({
         id: users.id,
@@ -112,10 +116,11 @@ export async function POST(request: Request) {
   }
 
   let verificationEmailSent = true;
+  let developmentVerificationCode: string | undefined;
+  let verificationToken: string | undefined;
 
   try {
-    const verificationToken =
-      await createEmailVerificationToken(user.id);
+    verificationToken = await createEmailVerificationToken(user.id);
 
     await sendVerificationEmail({
       email: user.email,
@@ -123,6 +128,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     verificationEmailSent = false;
+    if (process.env.NODE_ENV !== "production") developmentVerificationCode = verificationToken;
     console.error("Verification email delivery failed", error);
   }
 
@@ -130,6 +136,7 @@ export async function POST(request: Request) {
     {
       user,
       verificationEmailSent,
+      developmentVerificationCode,
       message: verificationEmailSent
         ? "Account created. Check your email to verify it."
         : "Account created, but the verification email could not be sent.",

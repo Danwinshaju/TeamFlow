@@ -1,4 +1,5 @@
 "use client";
+import { authFetch as fetch } from "@/lib/auth-fetch";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -18,7 +19,6 @@ export function WorkspaceInvitationForm({
   workspaceSlug,
 }: WorkspaceInvitationFormProps) {
   const router = useRouter();
-
   const [serverError, setServerError] =
     useState<string | null>(null);
 
@@ -74,7 +74,6 @@ export function WorkspaceInvitationForm({
       }
 
       reset();
-
       setSuccessMessage(
         result.message ??
           "Invitation sent successfully.",
@@ -97,6 +96,10 @@ export function WorkspaceInvitationForm({
       noValidate
       className="mt-6 space-y-4"
     >
+      <p className="rounded-xl border border-violet-400/20 bg-violet-400/5 px-4 py-3 text-xs leading-5 text-slate-400">
+        Enter the teammate&apos;s email address. TeamFlow will automatically email a secure invitation link that opens on your local network.
+      </p>
+
       <div>
         <label
           htmlFor="invitation-email"

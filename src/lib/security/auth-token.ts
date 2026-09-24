@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import {
   and,
   eq,
@@ -7,48 +7,52 @@ import {
 } from "drizzle-orm";
 
 import { db } from "@/db";
-import { authTokens, users } from "@/db/schema";
+import { authTokens, sessions, users } from "@/db/schema";
 
-const EMAIL_TOKEN_DURATION_HOURS = 24;
+const EMAIL_OTP_DURATION_MINUTES = 10;
 const PASSWORD_RESET_DURATION_MINUTES = 30;
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export async function createEmailVerificationToken(
-  userId: string,
-) {
-  await db
-    .delete(authTokens)
-    .where(
-      and(
-        eq(authTokens.userId, userId),
-        eq(authTokens.type, "email_verification"),
-        isNull(authTokens.usedAt),
-      ),
-    );
+export class EmailRateLimitError extends Error {
+  constructor() { super("Please wait before requesting another email. Limit: one per minute and five per hour."); }
+}
 
-  const token = randomBytes(32).toString("base64url");
-  const tokenHash = hashToken(token);
-  const expiresAt = new Date();
-
-  expiresAt.setHours(
-    expiresAt.getHours() + EMAIL_TOKEN_DURATION_HOURS,
-  );
-
-  await db.insert(authTokens).values({
-    userId,
-    type: "email_verification",
-    tokenHash,
-    expiresAt,
+async function createLimitedEmailToken(userId: string, type: "email_verification" | "password_reset", durationMs: number) {
+  return db.transaction(async (transaction) => {
+    // Serialize requests for this account, including across server processes.
+    await transaction.select({ id: users.id }).from(users).where(eq(users.id, userId)).for("update");
+    const now = new Date();
+    const recent = await transaction.select({ createdAt: authTokens.createdAt }).from(authTokens).where(and(
+      eq(authTokens.userId, userId), eq(authTokens.type, type),
+      gt(authTokens.createdAt, new Date(now.getTime() - 60 * 60_000)),
+    ));
+    if (recent.length >= 5 || recent.some((entry) => entry.createdAt.getTime() > now.getTime() - 60_000)) {
+      throw new EmailRateLimitError();
+    }
+    // Keep issuance history for rate limiting while invalidating previous links.
+    await transaction.update(authTokens).set({ usedAt: now }).where(and(
+      eq(authTokens.userId, userId), eq(authTokens.type, type), isNull(authTokens.usedAt),
+    ));
+    const token = type === "email_verification"
+      ? randomInt(0, 1_000_000).toString().padStart(6, "0")
+      : randomBytes(32).toString("base64url");
+    await transaction.insert(authTokens).values({
+      userId, type, tokenHash: hashToken(token), createdAt: now,
+      expiresAt: new Date(now.getTime() + durationMs),
+    });
+    return token;
   });
+}
 
-  return token;
+export async function createEmailVerificationToken(userId: string) {
+  return createLimitedEmailToken(userId, "email_verification", EMAIL_OTP_DURATION_MINUTES * 60_000);
 }
 
 export async function verifyEmailToken(token: string) {
-  if (!/^[A-Za-z0-9_-]{40,100}$/.test(token)) {
+  if (!/^\d{6}$/.test(token)) {
     return false;
   }
 
@@ -105,34 +109,18 @@ export async function verifyEmailToken(token: string) {
       })
       .where(eq(users.id, claimedToken.userId));
 
-    return true;
+    const [verifiedUser] = await transaction.select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+    }).from(users).where(eq(users.id, claimedToken.userId)).limit(1);
+
+    return verifiedUser || false;
   });
 }
 
 export async function createPasswordResetToken(userId: string) {
-  await db
-    .delete(authTokens)
-    .where(
-      and(
-        eq(authTokens.userId, userId),
-        eq(authTokens.type, "password_reset"),
-        isNull(authTokens.usedAt),
-      ),
-    );
-
-  const token = randomBytes(32).toString("base64url");
-  const expiresAt = new Date(
-    Date.now() + PASSWORD_RESET_DURATION_MINUTES * 60_000,
-  );
-
-  await db.insert(authTokens).values({
-    userId,
-    type: "password_reset",
-    tokenHash: hashToken(token),
-    expiresAt,
-  });
-
-  return token;
+  return createLimitedEmailToken(userId, "password_reset", PASSWORD_RESET_DURATION_MINUTES * 60_000);
 }
 
 export async function consumePasswordResetToken(
@@ -187,6 +175,8 @@ export async function consumePasswordResetToken(
       .set({ passwordHash, updatedAt: now })
       .where(eq(users.id, claimedToken.userId));
 
+    // Commit password replacement and revocation together. Access JWTs check this session row.
+    await transaction.delete(sessions).where(eq(sessions.userId, claimedToken.userId));
     return claimedToken.userId;
   });
 }

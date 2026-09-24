@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_subscriptions" ADD COLUMN "billing_provider" varchar(20);

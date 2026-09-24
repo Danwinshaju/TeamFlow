@@ -14,9 +14,11 @@ import {
 export function RegisterForm() {
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
   const {
     register,
+    setValue,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<RegisterInput>({
@@ -24,6 +26,10 @@ export function RegisterForm() {
     defaultValues: {
       name: "",
       email: "",
+      phone: "",
+      jobTitle: "",
+      bio: "",
+      avatarDataUrl: "",
       password: "",
       confirmPassword: "",
       acceptTerms: false,
@@ -44,6 +50,7 @@ export function RegisterForm() {
 
       const result = (await response.json()) as {
         error?: string;
+        developmentVerificationCode?: string;
       };
 
       if (!response.ok) {
@@ -53,12 +60,31 @@ export function RegisterForm() {
         return;
       }
 
-      router.push("/login?registered=true");
+      const verificationUrl = new URL("/verify-email", window.location.origin);
+      verificationUrl.searchParams.set("registered", "true");
+      verificationUrl.searchParams.set("email", data.email.trim().toLowerCase());
+      window.localStorage.setItem("teamflow_pending_verification_email", data.email.trim().toLowerCase());
+      router.push(verificationUrl.pathname + verificationUrl.search);
     } catch {
       setServerError(
         "Unable to connect to the server. Please try again.",
       );
     }
+  }
+
+  function chooseAvatar(file: File | null) {
+    if (!file) return;
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 1_000_000) {
+      setServerError("Choose a PNG, JPEG, or WebP profile image smaller than 1 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = typeof reader.result === "string" ? reader.result : "";
+      setAvatarPreview(image);
+      setValue("avatarDataUrl", image, { shouldValidate: true });
+    };
+    reader.readAsDataURL(file);
   }
 
   const inputClassName =
@@ -102,6 +128,20 @@ export function RegisterForm() {
             id="name-error"
             message={errors.name?.message}
           />
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <p className="font-medium text-slate-100">Profile details</p>
+          <p className="mt-1 text-sm text-slate-400">Help your teammates recognize you. These details can be changed later.</p>
+          <div className="mt-4 flex items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-violet-500/20 text-xl font-bold text-violet-200">{avatarPreview ? <img src={avatarPreview} alt="Profile preview" className="h-full w-full object-cover" /> : "?"}</div>
+            <label className="cursor-pointer rounded-xl border border-white/15 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10">Add profile photo<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => chooseAvatar(event.target.files?.[0] ?? null)} /></label>
+          </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div><label htmlFor="job-title" className="mb-2 block text-sm font-medium text-slate-200">Job title</label><input id="job-title" type="text" placeholder="Product designer" className={inputClassName} {...register("jobTitle")} /><ErrorMessage id="job-title-error" message={errors.jobTitle?.message} /></div>
+            <div><label htmlFor="phone" className="mb-2 block text-sm font-medium text-slate-200">Phone number <span className="text-slate-500">(optional)</span></label><input id="phone" type="tel" autoComplete="tel" placeholder="+91 98765 43210" className={inputClassName} {...register("phone")} /><ErrorMessage id="phone-error" message={errors.phone?.message} /></div>
+          </div>
+          <div className="mt-4"><label htmlFor="bio" className="mb-2 block text-sm font-medium text-slate-200">Short bio <span className="text-slate-500">(optional)</span></label><textarea id="bio" rows={3} maxLength={500} placeholder="Tell your team what you work on." className={inputClassName} {...register("bio")} /><ErrorMessage id="bio-error" message={errors.bio?.message} /></div>
         </div>
 
         <div>

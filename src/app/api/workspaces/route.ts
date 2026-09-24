@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 
 import { db } from "@/db";
-import { workspaceMembers, workspaces } from "@/db/schema";
+import { and, eq, isNotNull } from "drizzle-orm";
+import { userAccessRequests, workspaceMembers, workspaces } from "@/db/schema";
 import { getCurrentUser } from "@/lib/security/session";
 import { createWorkspaceSchema } from "@/lib/validations/workspace";
 
@@ -18,6 +19,19 @@ export async function POST(request: Request) {
     return Response.json(
       { error: "Verify your email before creating a workspace." },
       { status: 403 },
+    );
+  }
+
+  const [paidAccess] = await db.select({ id: userAccessRequests.id }).from(userAccessRequests).where(and(
+    eq(userAccessRequests.userId, user.id),
+    eq(userAccessRequests.status, "approved"),
+    isNotNull(userAccessRequests.stripeSubscriptionId),
+  )).limit(1);
+
+  if (!paidAccess) {
+    return Response.json(
+      { error: "Complete the Owner subscription before creating your workspace." },
+      { status: 402 },
     );
   }
 

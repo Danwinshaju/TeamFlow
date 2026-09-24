@@ -13,6 +13,7 @@ import {
   workspaces,
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/security/session";
+import { hasPaidWorkspaceAccess } from "@/lib/billing/access";
 
 export const metadata = { title: "Project" };
 
@@ -57,6 +58,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     notFound();
   }
 
+  if (!(await hasPaidWorkspaceAccess(user.id, slug))) redirect(project.memberRole === "owner" ? "/onboarding/billing?required=true" : "/dashboard?workspace=paused");
+
   const members = await db
     .select({
       id: users.id,
@@ -81,7 +84,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     })
     .from(tasks)
     .leftJoin(users, eq(tasks.assigneeId, users.id))
-    .where(eq(tasks.projectId, project.id));
+    .where(and(
+      eq(tasks.projectId, project.id),
+      project.memberRole === "member" ? eq(tasks.assigneeId, user.id) : undefined,
+    ));
 
   const completedTasks = projectTasks.filter(
     (task) => task.status === "done",
@@ -108,7 +114,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{project.name}</h1>
             <p className="mt-3 max-w-3xl text-slate-400">{project.description || "No project description yet."}</p>
           </div>
-          <span className="w-fit rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-sm capitalize text-emerald-300">{project.status}</span>
+          <div className="flex items-center gap-3">
+            {(project.memberRole === "owner" || project.memberRole === "admin") && project.status === "active" && <a href="#assign-task" className="rounded-xl bg-violet-500 px-5 py-3 text-sm font-semibold hover:bg-violet-400">Assign task</a>}
+            <span className="w-fit rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-sm capitalize text-emerald-300">{project.status}</span>
+          </div>
         </div>
 
         <section className="mt-10 grid gap-5 sm:grid-cols-3">

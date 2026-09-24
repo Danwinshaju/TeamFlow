@@ -1,4 +1,5 @@
 "use client";
+import { authFetch as fetch } from "@/lib/auth-fetch";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -32,14 +33,22 @@ export function WorkspaceForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      const result = (await response.json()) as { error?: string };
+      const result = (await response.json()) as {
+        error?: string;
+        workspace?: { slug: string };
+      };
 
       if (!response.ok) {
         setServerError(result.error ?? "Unable to create the workspace.");
         return;
       }
 
+      if (!result.workspace?.slug) {
+        setServerError("Workspace created, but it could not be opened.");
+        return;
+      }
       reset();
+      router.push(`/workspaces/${result.workspace.slug}`);
       router.refresh();
     } catch {
       setServerError("Unable to connect to the server. Please try again.");

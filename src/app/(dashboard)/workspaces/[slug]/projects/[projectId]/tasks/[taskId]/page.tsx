@@ -6,6 +6,7 @@ import { TaskDetailsPanel } from "@/components/task-details-panel";
 import { db } from "@/db";
 import { projects, taskActivities, taskComments, tasks, users, workspaceMembers, workspaces } from "@/db/schema";
 import { getCurrentUser } from "@/lib/security/session";
+import { hasPaidWorkspaceAccess } from "@/lib/billing/access";
 
 export const metadata = { title: "Task details" };
 
@@ -33,6 +34,7 @@ export default async function TaskPage({ params }: TaskPageProps) {
       projectStatus: projects.status,
       workspaceId: workspaces.id,
       workspaceName: workspaces.name,
+      memberRole: workspaceMembers.role,
     })
     .from(tasks)
     .innerJoin(projects, eq(tasks.projectId, projects.id))
@@ -42,6 +44,10 @@ export default async function TaskPage({ params }: TaskPageProps) {
     .limit(1);
 
   if (!task) notFound();
+
+  if (task.memberRole === "member" && task.assigneeId !== currentUser.id) notFound();
+
+  if (!(await hasPaidWorkspaceAccess(currentUser.id, slug))) redirect(task.memberRole === "owner" ? "/onboarding/billing?required=true" : "/dashboard?workspace=paused");
 
   const [members, comments, activities] = await Promise.all([
     db.select({ id: users.id, name: users.name }).from(workspaceMembers).innerJoin(users, eq(workspaceMembers.userId, users.id)).where(eq(workspaceMembers.workspaceId, task.workspaceId)),
@@ -59,7 +65,7 @@ export default async function TaskPage({ params }: TaskPageProps) {
         <h1 className="mt-2 text-3xl font-bold tracking-tight">{task.title}</h1>
         <p className="mt-2 text-sm text-slate-500">Created {formatDate(task.createdAt)}</p>
         {task.projectStatus === "archived" && <div className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-200">This project is archived. Task details are read-only.</div>}
-        <div className="mt-8"><TaskDetailsPanel apiBase={taskApiBase} readOnly={task.projectStatus === "archived"} task={{ ...task, dueAt: task.dueAt?.toISOString() ?? null }} members={members} comments={comments.map((comment) => ({ ...comment, createdAt: comment.createdAt.toISOString() }))} /></div>
+        <div className="mt-8"><TaskDetailsPanel apiBase={taskApiBase} readOnly={task.projectStatus === "archived"} canManageTasks={(task.memberRole === "owner" || task.memberRole === "admin") && task.assigneeId !== currentUser.id} canUpdateStatus={task.assigneeId === currentUser.id} task={{ ...task, dueAt: task.dueAt?.toISOString() ?? null }} members={members} comments={comments.map((comment) => ({ ...comment, createdAt: comment.createdAt.toISOString() }))} /></div>
 
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
           <h2 className="text-xl font-semibold">Activity history</h2>

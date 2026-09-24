@@ -69,6 +69,14 @@ export const users = pgTable(
       length: 320,
     }).notNull(),
 
+    phone: varchar("phone", { length: 30 }),
+    jobTitle: varchar("job_title", { length: 100 }),
+    bio: text("bio"),
+    avatarDataUrl: text("avatar_data_url"),
+    availabilityStatus: varchar("availability_status", { length: 10 })
+      .default("active")
+      .notNull(),
+
     passwordHash: varchar("password_hash", {
       length: 255,
     }).notNull(),
@@ -214,8 +222,10 @@ export const workspaceSubscriptions = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
     planKey: varchar("plan_key", { length: 40 }).notNull(),
-    razorpayPlanId: varchar("razorpay_plan_id", { length: 100 }).notNull(),
-    razorpaySubscriptionId: varchar("razorpay_subscription_id", {
+    billingProvider: varchar("billing_provider", { length: 20 }),
+    stripeCustomerId: varchar("stripe_customer_id", { length: 100 }).notNull(),
+    stripePriceId: varchar("stripe_price_id", { length: 100 }).notNull(),
+    stripeSubscriptionId: varchar("stripe_subscription_id", {
       length: 100,
     }).notNull(),
     status: subscriptionStatus("status").default("created").notNull(),
@@ -237,8 +247,8 @@ export const workspaceSubscriptions = pgTable(
     uniqueIndex("workspace_subscriptions_workspace_unique").on(
       table.workspaceId,
     ),
-    uniqueIndex("workspace_subscriptions_razorpay_id_unique").on(
-      table.razorpaySubscriptionId,
+    uniqueIndex("workspace_subscriptions_stripe_id_unique").on(
+      table.stripeSubscriptionId,
     ),
     index("workspace_subscriptions_status_idx").on(table.status),
   ],
@@ -268,6 +278,44 @@ export const workspaceMembers = pgTable(
     index("workspace_members_workspace_id_idx").on(table.workspaceId),
   ],
 );
+
+export const userAccessRequests = pgTable(
+  "user_access_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    status: varchar("status", { length: 30 }).default("awaiting_payment").notNull(),
+    stripeCustomerId: varchar("stripe_customer_id", { length: 100 }),
+    stripeSubscriptionId: varchar("stripe_subscription_id", { length: 100 }),
+    stripePriceId: varchar("stripe_price_id", { length: 100 }),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
+    approvedRole: workspaceRole("approved_role"),
+    reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("user_access_requests_user_unique").on(table.userId),
+    uniqueIndex("user_access_requests_subscription_unique").on(table.stripeSubscriptionId),
+    index("user_access_requests_status_idx").on(table.status),
+  ],
+);
+
+export const workspaceMessages = pgTable("workspace_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  body: varchar("body", { length: 2000 }).notNull(),
+  attachmentType: varchar("attachment_type", { length: 20 }),
+  attachmentName: varchar("attachment_name", { length: 255 }),
+  attachmentMimeType: varchar("attachment_mime_type", { length: 120 }),
+  attachmentDataUrl: text("attachment_data_url"),
+  recipientUserId: uuid("recipient_user_id").references(() => users.id, { onDelete: "cascade" }),
+  replyToId: uuid("reply_to_id"),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, table => [index("workspace_messages_workspace_created_idx").on(table.workspaceId, table.createdAt), index("workspace_messages_user_created_idx").on(table.userId, table.createdAt), index("workspace_messages_recipient_created_idx").on(table.recipientUserId, table.createdAt)]);
 
 export const workspaceInvitations = pgTable(
   "workspace_invitations",
@@ -303,6 +351,10 @@ export const workspaceInvitations = pgTable(
     }).notNull(),
 
     acceptedAt: timestamp("accepted_at", {
+      withTimezone: true,
+    }),
+
+    requestedAt: timestamp("requested_at", {
       withTimezone: true,
     }),
 

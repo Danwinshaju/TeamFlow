@@ -1,4 +1,5 @@
 "use client";
+import { authFetch as fetch } from "@/lib/auth-fetch";
 
 import { useState } from "react";
 import Link from "next/link";

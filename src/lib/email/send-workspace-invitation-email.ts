@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { emailAppUrl, sendEmail } from "@/lib/email/mailer";
 
 type SendWorkspaceInvitationEmailOptions = {
   email: string;
@@ -13,15 +13,7 @@ export async function sendWorkspaceInvitationEmail({
   workspaceName,
   inviterName,
 }: SendWorkspaceInvitationEmailOptions) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
-  const appUrl = process.env.APP_URL;
-
-  if (!apiKey || !from || !appUrl) {
-    throw new Error(
-      "Email environment variables are not configured.",
-    );
-  }
+  const appUrl = emailAppUrl();
 
   const invitationUrl = new URL(
     "/accept-invitation",
@@ -30,36 +22,21 @@ export async function sendWorkspaceInvitationEmail({
 
   invitationUrl.searchParams.set("token", token);
 
-  const idempotencyKey = createHash("sha256")
-    .update(token)
-    .digest("hex");
-
   const safeWorkspaceName = escapeHtml(workspaceName);
   const safeInviterName = escapeHtml(inviterName);
 
-  const response = await fetch(
-    "https://api.resend.com/emails",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "Idempotency-Key":
-          `workspace-invitation-${idempotencyKey}`,
-      },
-      body: JSON.stringify({
-        from,
-        to: [email],
-        subject: `Join ${workspaceName} on TeamFlow`,
-        text: [
+  await sendEmail({
+    to: email,
+    subject: `Join ${workspaceName} on TeamFlow`,
+    text: [
           `${inviterName} invited you to join ${workspaceName} on TeamFlow.`,
           "",
           "Accept the invitation using this link:",
           invitationUrl.toString(),
           "",
           "This invitation expires in 7 days.",
-        ].join("\n"),
-        html: `
+    ].join("\n"),
+    html: `
           <div style="font-family: Arial, sans-serif; color: #111827;">
             <h1>Join ${safeWorkspaceName}</h1>
 
@@ -80,19 +57,7 @@ export async function sendWorkspaceInvitationEmail({
             <p>This invitation expires in 7 days.</p>
           </div>
         `,
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => null) as {
-      message?: string;
-    } | null;
-    throw new Error(
-      errorBody?.message ||
-        `Resend rejected the invitation with status ${response.status}.`,
-    );
-  }
+  });
 }
 
 function escapeHtml(value: string) {

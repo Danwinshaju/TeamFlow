@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+
+import { getUserAccessDestination } from "@/lib/billing/access";
+import { getCurrentUser } from "@/lib/security/session";
 
 const features = [
   {
@@ -18,7 +22,12 @@ const features = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (user.status !== "active") redirect("/verify-email?required=true");
+  redirect(await getUserAccessDestination(user.id));
+
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <nav className="border-b border-white/10">

@@ -5,6 +5,8 @@ import { users } from "@/db/schema";
 import { createSession } from "@/lib/security/session";
 import { verifyPassword } from "@/lib/security/password";
 import { loginSchema } from "@/lib/validations/auth";
+import { getUserAccessDestination } from "@/lib/billing/access";
+import { sendLoginSuccessEmail } from "@/lib/email/send-account-notification-email";
 
 export const runtime = "nodejs";
 
@@ -90,7 +92,24 @@ export async function POST(request: Request) {
     );
   }
 
-  await createSession(user.id);
+  if (user.status !== "active") {
+    return Response.json(
+      { error: "Your email is not verified yet. Enter the OTP or request a new one.", verificationRequired: true, email: user.email },
+      { status: 403 },
+    );
+  }
+
+  if (!(await createSession(user.id, user.passwordHash))) {
+    return Response.json({ error: "Your account changed. Please sign in again." }, { status: 401 });
+  }
+
+  try {
+    await sendLoginSuccessEmail({ email: user.email, name: user.name });
+  } catch (error) {
+    console.error("Login notification email delivery failed", error);
+  }
+
+  const next = await getUserAccessDestination(user.id);
 
   return Response.json({
     user: {
@@ -99,5 +118,6 @@ export async function POST(request: Request) {
       email: user.email,
       status: user.status,
     },
+    next,
   });
 }

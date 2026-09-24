@@ -7,6 +7,7 @@ export const metadata = {
 type VerifyEmailPageProps = {
   searchParams: Promise<{
     token?: string | string[];
+    email?: string | string[];
   }>;
 };
 
@@ -20,5 +21,7 @@ export default async function VerifyEmailPage({
       ? parameters.token
       : null;
 
-  return <VerifyEmailForm token={token} />;
+  const email = typeof parameters.email === "string" ? parameters.email : null;
+
+  return <VerifyEmailForm token={token} email={email} />;
 }

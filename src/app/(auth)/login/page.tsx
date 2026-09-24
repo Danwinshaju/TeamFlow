@@ -4,6 +4,11 @@ export const metadata = {
   title: "Sign in",
 };
 
-export default function LoginPage() {
-  return <LoginForm />;
+type LoginPageProps = {
+  searchParams: Promise<{ registered?: string | string[]; verified?: string | string[] }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const parameters = await searchParams;
+  return <LoginForm registrationComplete={parameters.registered === "true"} emailVerified={parameters.verified === "true"} />;
 }

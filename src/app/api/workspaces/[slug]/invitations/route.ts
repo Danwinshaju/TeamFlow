@@ -102,6 +102,7 @@ export async function GET(
       role: workspaceInvitations.role,
       expiresAt: workspaceInvitations.expiresAt,
       createdAt: workspaceInvitations.createdAt,
+      requestedAt: workspaceInvitations.requestedAt,
     })
     .from(workspaceInvitations)
     .where(
@@ -376,17 +377,9 @@ export async function POST(
       error,
     );
 
-    const message = error instanceof Error ? error.message : "Unknown email delivery error.";
-    const isResendTestRestriction =
-      message.toLowerCase().includes("testing") ||
-      message.toLowerCase().includes("resend.dev");
-
     return Response.json(
       {
-        error:
-          isResendTestRestriction
-            ? `${message} Use the Resend account email for testing, or verify a domain in Resend.`
-            : "The invitation email could not be sent.",
+        error: "The invitation email could not be sent. Check the Gmail SMTP settings and App Password.",
       },
       {
         status: 502,
@@ -397,7 +390,7 @@ export async function POST(
   return Response.json(
     {
       message:
-        "Invitation sent successfully.",
+        "Invitation email sent successfully.",
     },
     {
       status: 201,

@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_invitations" ADD COLUMN "requested_at" timestamp with time zone;

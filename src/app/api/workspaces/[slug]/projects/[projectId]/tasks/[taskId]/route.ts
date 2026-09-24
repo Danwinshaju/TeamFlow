@@ -24,7 +24,12 @@ export async function PATCH(request: Request, context: TaskRouteContext) {
 
   const { slug, projectId, taskId } = await context.params;
   const [access] = await db
-    .select({ workspaceId: workspaces.id, role: workspaceMembers.role, projectStatus: projects.status })
+    .select({
+      workspaceId: workspaces.id,
+      role: workspaceMembers.role,
+      projectStatus: projects.status,
+      taskAssigneeId: tasks.assigneeId,
+    })
     .from(projects)
     .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
     .innerJoin(
@@ -34,6 +39,7 @@ export async function PATCH(request: Request, context: TaskRouteContext) {
         eq(workspaceMembers.userId, currentUser.id),
       ),
     )
+    .innerJoin(tasks, and(eq(tasks.projectId, projects.id), eq(tasks.id, taskId)))
     .where(and(eq(projects.id, projectId), eq(workspaces.slug, slug)))
     .limit(1);
 
@@ -63,6 +69,24 @@ export async function PATCH(request: Request, context: TaskRouteContext) {
   }
 
   const changes = result.data;
+  const isAssignee = access.taskAssigneeId === currentUser.id;
+  const canManageTasks =
+    (access.role === "owner" || access.role === "admin") && !isAssignee;
+
+  if (!canManageTasks) {
+    const changedFields = Object.keys(changes);
+    const isOwnStatusUpdate =
+      changedFields.length === 1 &&
+      changedFields[0] === "status" &&
+      isAssignee;
+
+    if (!isOwnStatusUpdate) {
+      return Response.json(
+        { error: "Members can only update the status of tasks assigned to them." },
+        { status: 403 },
+      );
+    }
+  }
 
   if (changes.assigneeId) {
     const [assignee] = await db
@@ -184,14 +208,11 @@ export async function DELETE(_request: Request, context: TaskRouteContext) {
     return Response.json({ error: "Reactivate this project before deleting tasks." }, { status: 409 });
   }
 
-  const mayDelete =
-    taskAccess.role === "owner" ||
-    taskAccess.role === "admin" ||
-    taskAccess.createdByUserId === currentUser.id;
+  const mayDelete = taskAccess.role === "owner" || taskAccess.role === "admin";
 
   if (!mayDelete) {
     return Response.json(
-      { error: "Only an owner, admin, or the task creator can delete this task." },
+      { error: "Only workspace Owners and Admins can delete tasks." },
       { status: 403 },
     );
   }

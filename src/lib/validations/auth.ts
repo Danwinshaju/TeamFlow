@@ -14,6 +14,14 @@ export const registerSchema = z
       .toLowerCase()
       .email("Enter a valid email address"),
 
+    phone: z.string().trim().max(30, "Phone number is too long"),
+    jobTitle: z.string().trim().max(100, "Job title is too long"),
+    bio: z.string().trim().max(500, "Bio cannot exceed 500 characters"),
+    avatarDataUrl: z.string().max(1_500_000, "Profile image is too large").refine(
+      (value) => !value || /^data:image\/(?:png|jpeg|webp);base64,/.test(value),
+      "Choose a PNG, JPEG, or WebP image",
+    ),
+
     password: z
       .string()
       .min(8, "Password must contain at least 8 characters")
@@ -48,6 +56,16 @@ export const loginSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+export const profileSchema = z.object({
+  name: z.string().trim().min(2, "Name must contain at least 2 characters").max(80, "Name cannot exceed 80 characters"),
+  phone: z.string().trim().max(30, "Phone number is too long").optional().default(""),
+  jobTitle: z.string().trim().max(100, "Job title is too long").optional().default(""),
+  bio: z.string().trim().max(500, "Bio cannot exceed 500 characters").optional().default(""),
+  avatarDataUrl: z.string().max(1_500_000, "Profile image is too large").refine((value) => !value || /^data:image\/(?:png|jpeg|webp);base64,/.test(value), "Choose a PNG, JPEG, or WebP image").optional().default(""),
+});
+
+export type ProfileInput = z.infer<typeof profileSchema>;
 
 export const forgotPasswordSchema = z.object({
   email: z

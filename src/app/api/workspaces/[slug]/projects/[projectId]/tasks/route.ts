@@ -7,6 +7,7 @@ import {
   tasks,
   users,
   workspaceMembers,
+  workspaceMessages,
   workspaces,
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/security/session";
@@ -34,7 +35,7 @@ export async function POST(request: Request, context: TasksRouteContext) {
 
   const { slug, projectId } = await context.params;
   const [access] = await db
-    .select({ workspaceId: workspaces.id, projectStatus: projects.status })
+    .select({ workspaceId: workspaces.id, projectStatus: projects.status, role: workspaceMembers.role })
     .from(projects)
     .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
     .innerJoin(
@@ -49,6 +50,13 @@ export async function POST(request: Request, context: TasksRouteContext) {
 
   if (!access) {
     return Response.json({ error: "Project not found." }, { status: 404 });
+  }
+
+  if (access.role !== "owner" && access.role !== "admin") {
+    return Response.json(
+      { error: "Only workspace Owners and Admins can create and assign tasks." },
+      { status: 403 },
+    );
   }
 
   if (access.projectStatus === "archived") {
@@ -100,27 +108,43 @@ export async function POST(request: Request, context: TasksRouteContext) {
     assigneeName = assignee.name;
   }
 
-  const [task] = await db
-    .insert(tasks)
-    .values({
-      projectId,
-      workspaceId: access.workspaceId,
-      title: result.data.title,
-      description: result.data.description || null,
-      priority: result.data.priority,
-      assigneeId: result.data.assigneeId || null,
-      dueAt: result.data.dueDate
-        ? new Date(`${result.data.dueDate}T23:59:59.999Z`)
-        : null,
-      createdByUserId: currentUser.id,
-    })
-    .returning();
+  const task = await db.transaction(async (transaction) => {
+    const [createdTask] = await transaction
+      .insert(tasks)
+      .values({
+        projectId,
+        workspaceId: access.workspaceId,
+        title: result.data.title,
+        description: result.data.description || null,
+        priority: result.data.priority,
+        assigneeId: result.data.assigneeId || null,
+        dueAt: result.data.dueDate
+          ? new Date(`${result.data.dueDate}T23:59:59.999Z`)
+          : null,
+        createdByUserId: currentUser.id,
+      })
+      .returning();
 
-  await db.insert(taskActivities).values({
-    taskId: task.id,
-    actorUserId: currentUser.id,
-    action: "created",
-    details: "created this task",
+    await transaction.insert(taskActivities).values({
+      taskId: createdTask.id,
+      actorUserId: currentUser.id,
+      action: "created",
+      details: result.data.assigneeId
+        ? `created and assigned this task to ${assigneeName}`
+        : "created this task",
+    });
+
+    if (result.data.assigneeId && result.data.assigneeId !== currentUser.id) {
+      const dueText = result.data.dueDate ? ` Due: ${result.data.dueDate}.` : "";
+      await transaction.insert(workspaceMessages).values({
+        workspaceId: access.workspaceId,
+        userId: currentUser.id,
+        recipientUserId: result.data.assigneeId,
+        body: `📋 New task assigned to you: “${result.data.title}”. Priority: ${result.data.priority}.${dueText} Open My tasks to view it.`,
+      });
+    }
+
+    return createdTask;
   });
 
   return Response.json(
